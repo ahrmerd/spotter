@@ -25,7 +25,7 @@ object HeaderUtils {
         var hasUa = false
         for ((k, v) in captured) {
             val lk = k.lowercase()
-            if (lk in SKIP) continue
+            if (lk in SKIP || lk.startsWith("x-spotter-")) continue
             out[k] = v
             if (lk == "user-agent") hasUa = true
         }

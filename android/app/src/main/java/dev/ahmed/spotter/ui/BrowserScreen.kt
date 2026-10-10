@@ -33,7 +33,10 @@ import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -90,6 +93,30 @@ fun BrowserScreen(
         val msg = ui.message ?: return@LaunchedEffect
         snackbar.showSnackbar(msg)
         vm.clearMessage()
+    }
+    ui.quality?.let { prompt ->
+        AlertDialog(
+            onDismissRequest = { vm.dismissQuality() },
+            title = { Text("Quality") },
+            text = {
+                Column {
+                    prompt.options.forEachIndexed { i, option ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .selectable(selected = i == prompt.selected, onClick = { vm.selectQuality(i) })
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = i == prompt.selected, onClick = { vm.selectQuality(i) })
+                            Text(option.label, modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton({ vm.confirmQuality() }) { Text("Download") } },
+            dismissButton = { TextButton({ vm.dismissQuality() }) { Text("Cancel") } },
+        )
     }
     LaunchedEffect(ui.detected) {
         names = ui.detected.associate { it.url to (names[it.url] ?: it.suggestedName) }

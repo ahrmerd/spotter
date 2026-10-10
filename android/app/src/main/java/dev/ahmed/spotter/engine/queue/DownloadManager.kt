@@ -3,6 +3,10 @@ package dev.ahmed.spotter.engine.queue
 import dev.ahmed.spotter.engine.EngineErrors
 import dev.ahmed.spotter.engine.EngineLog
 import dev.ahmed.spotter.engine.Filenames
+import dev.ahmed.spotter.engine.hls.HlsDownloader
+import dev.ahmed.spotter.engine.hls.HlsPlaylist
+import dev.ahmed.spotter.engine.hls.HlsRemuxer
+import dev.ahmed.spotter.engine.hls.KeepTsRemuxer
 import dev.ahmed.spotter.engine.http.DownloadOutcome
 import dev.ahmed.spotter.engine.http.HttpDownloader
 import dev.ahmed.spotter.engine.model.DownloadRecord
@@ -43,6 +47,7 @@ class DownloadManager(
     private val tokenBucket: TokenBucket = TokenBucket(),
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     sinkFactory: FileSinkFactory? = null,
+    hlsRemuxer: HlsRemuxer = KeepTsRemuxer,
 ) {
     private val connectionLimiter = AtomicReference(Semaphore(EngineSettings.DEFAULT_MAX_CONNECTIONS))
     private val downloader = HttpDownloader(
@@ -52,6 +57,15 @@ class DownloadManager(
         tokenBucket = tokenBucket,
         connectionLimiter = connectionLimiter,
         ioDispatcher = ioDispatcher,
+    )
+    private val hlsDownloader = HlsDownloader(
+        client = client,
+        store = store,
+        logger = logger,
+        tokenBucket = tokenBucket,
+        connectionLimiter = connectionLimiter,
+        ioDispatcher = ioDispatcher,
+        remuxer = hlsRemuxer,
     )
     private val sinks = sinkFactory ?: FileSinkFactory { filename, resumePath, _ ->
         PrivateFileSink.forName(outputDir, filename, resumePath)
@@ -341,12 +355,22 @@ class DownloadManager(
         job = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 val settings = store.loadSettings()
-                val outcome = downloader.download(
-                    downloadId = id,
-                    sinkFactory = sinks,
-                    connections = settings.connectionsPerFileCapped(),
-                    allocateName = { suggested -> allocateName(id, suggested) },
-                )
+                val current = store.get(id) ?: return@launch
+                val outcome = if (HlsPlaylist.looksLikeHls(current.url, current.headers, current.mimeType)) {
+                    hlsDownloader.download(
+                        downloadId = id,
+                        sinkFactory = sinks,
+                        workRoot = outputDir,
+                        allocateName = { suggested -> allocateName(id, suggested) },
+                    )
+                } else {
+                    downloader.download(
+                        downloadId = id,
+                        sinkFactory = sinks,
+                        connections = settings.connectionsPerFileCapped(),
+                        allocateName = { suggested -> allocateName(id, suggested) },
+                    )
+                }
                 applyOutcome(id, outcome)
             } catch (e: CancellationException) {
                 val reason = stop.remove(id) ?: StopReason.Kill
@@ -388,7 +412,7 @@ class DownloadManager(
     private suspend fun applyOutcome(id: Long, outcome: DownloadOutcome) {
         val rec = store.get(id) ?: return
         when (outcome) {
-            DownloadOutcome.Completed -> store.update(rec.copy(state = DownloadState.DONE, error = null))
+            DownloadOutcome.Completed -> store.update(rec.copy(state = DownloadState.DONE))
             is DownloadOutcome.NeedsRefresh -> store.update(
                 rec.copy(state = DownloadState.NEEDS_REFRESH, error = outcome.message),
             )
@@ -425,6 +449,10 @@ class DownloadManager(
         }
         if (rec.filename.isNotEmpty()) {
             File(outputDir, "${rec.filename}.part").takeIf { it.exists() }?.delete()
+        }
+        val hlsDir = File(outputDir, ".hls-${rec.id}")
+        if (hlsDir.exists() && !hlsDir.deleteRecursively()) {
+            logger.warn("delete HLS work dir failed id=${rec.id}")
         }
     }
 

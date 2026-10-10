@@ -7,6 +7,7 @@ import androidx.room.Room
 import dev.ahmed.spotter.engine.EngineLog
 import dev.ahmed.spotter.engine.model.DownloadState
 import dev.ahmed.spotter.engine.net.NetworkPolicy
+import dev.ahmed.spotter.engine.hls.MediaMuxerRemuxer
 import dev.ahmed.spotter.engine.queue.DownloadManager
 import dev.ahmed.spotter.engine.sink.AndroidSinkFactory
 import dev.ahmed.spotter.browser.BrowserStore
@@ -64,6 +65,7 @@ class SpotterApp : Application() {
                 }
             },
             sinkFactory = AndroidSinkFactory(contentResolver, privateDir),
+            hlsRemuxer = MediaMuxerRemuxer(),
         )
     }
 

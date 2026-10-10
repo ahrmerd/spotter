@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.ahmed.spotter.engine.Categories
 import dev.ahmed.spotter.engine.model.DownloadState
+import dev.ahmed.spotter.engine.hls.HlsProgress
 import dev.ahmed.spotter.service.DownloadNotifier
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -339,13 +340,14 @@ private fun DownloadRow(
 
 private fun statusLine(ui: DownloadUi): String {
     val rec = ui.record
-    val bytes = if (rec.size > 0) {
-        "${DownloadNotifier.formatBytes(rec.downloaded)} / ${DownloadNotifier.formatBytes(rec.size)}"
-    } else {
-        DownloadNotifier.formatBytes(rec.downloaded)
+    val bytes = when {
+        HlsProgress.isSegmentMode(rec) && rec.size > 0 -> HlsProgress.line(rec.downloaded, rec.size)
+        rec.size > 0 -> "${DownloadNotifier.formatBytes(rec.downloaded)} / ${DownloadNotifier.formatBytes(rec.size)}"
+        else -> DownloadNotifier.formatBytes(rec.downloaded)
     }
     val speed = if (ui.speedBps > 0 && rec.state == DownloadState.RUNNING) {
-        " · ${DownloadNotifier.formatBytes(ui.speedBps)}/s"
+        if (HlsProgress.isSegmentMode(rec)) " · ${ui.speedBps} seg/s"
+        else " · ${DownloadNotifier.formatBytes(ui.speedBps)}/s"
     } else {
         ""
     }
@@ -354,7 +356,7 @@ private fun statusLine(ui: DownloadUi): String {
         DownloadState.QUEUED -> "Queued"
         DownloadState.RUNNING -> if (rec.size <= 0 && rec.downloaded > 0) "Downloading (size unknown)" else "Downloading"
         DownloadState.PAUSED -> if (!rec.ranged && rec.downloaded > 0) "Paused · resume restarts from 0" else "Paused"
-        DownloadState.DONE -> "Done"
+        DownloadState.DONE -> "Done${rec.error?.let { " · $it" } ?: ""}"
         DownloadState.ERROR -> "Error${rec.error?.let { ": $it" } ?: ""}"
         DownloadState.NEEDS_REFRESH -> "Needs refresh${rec.error?.let { ": $it" } ?: ""}"
     }

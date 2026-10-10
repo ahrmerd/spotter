@@ -17,7 +17,12 @@ import dev.ahmed.spotter.browser.PopupRules
 import dev.ahmed.spotter.browser.SnifferCoordinator
 import dev.ahmed.spotter.browser.WebViewCallbacks
 import dev.ahmed.spotter.browser.WebViewHolder
+import dev.ahmed.spotter.engine.EngineErrors
 import dev.ahmed.spotter.engine.Filenames
+import dev.ahmed.spotter.engine.hls.HlsDocument
+import dev.ahmed.spotter.engine.hls.HlsHeaders
+import dev.ahmed.spotter.engine.hls.HlsHttp
+import dev.ahmed.spotter.engine.hls.HlsPlaylist
 import dev.ahmed.spotter.engine.net.RangeProbe
 import dev.ahmed.spotter.engine.store.BookmarkEntity
 import dev.ahmed.spotter.engine.store.HistoryEntity
@@ -32,6 +37,20 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+
+data class HlsQualityOption(
+    val label: String,
+    val variantUri: String,
+    val audioUri: String?,
+)
+
+data class QualityPrompt(
+    val item: DetectedItem,
+    val name: String,
+    val headers: Map<String, String>,
+    val options: List<HlsQualityOption>,
+    val selected: Int,
+)
 
 data class BrowserUi(
     val tabs: List<TabEntity> = emptyList(),
@@ -48,6 +67,7 @@ data class BrowserUi(
     val bookmarks: List<BookmarkEntity> = emptyList(),
     val history: List<HistoryEntity> = emptyList(),
     val message: String? = null,
+    val quality: QualityPrompt? = null,
 )
 
 class BrowserViewModel(application: Application) : AndroidViewModel(application) {
@@ -64,6 +84,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private val canForward = MutableStateFlow(false)
     private val detectedTick = MutableStateFlow(0L)
     private val message = MutableStateFlow<String?>(null)
+    val qualityPrompt = MutableStateFlow<QualityPrompt?>(null)
+    private val hlsHttp = HlsHttp(app.httpClient)
     private val typedUrl = ConcurrentHashMap<Long, String>()
     private val pageMeta = ConcurrentHashMap<Long, Pair<String, String>>()
 
@@ -97,7 +119,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         store.observeBookmarks(),
         store.observeHistory(),
         combine(activeTabId, address, loading, progress) { a, b, c, d -> Quad(a, b, c, d) },
-        combine(canBack, canForward, detectedTick, message) { a, b, c, d -> Quad(a, b, c, d) },
+        combine(canBack, canForward, detectedTick, message, qualityPrompt) { a, b, c, d, q ->
+            Quint(a, b, c, d, q)
+        },
     ) { tabs, bookmarks, history, nav, extra ->
         val id = nav.a
         val addr = nav.b
@@ -119,6 +143,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             bookmarks = bookmarks,
             history = history,
             message = extra.d,
+            quality = extra.e,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BrowserUi())
 
@@ -322,13 +347,86 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 null
             }
             val headers = HeaderCapture.mergeCookie(item.headers, cookie)
-            app.manager.enqueue(item.url, headers, filename)
-            message.value = "Queued $filename"
+            if (item.kind == MediaKind.PLAYLIST) {
+                enqueuePlaylist(item, filename, headers)
+            } else {
+                app.manager.enqueue(item.url, headers, filename)
+                message.value = "Queued $filename"
+            }
         }
+    }
+
+    fun selectQuality(index: Int) {
+        val prompt = qualityPrompt.value ?: return
+        if (index in prompt.options.indices) {
+            qualityPrompt.value = prompt.copy(selected = index)
+        }
+    }
+
+    fun confirmQuality() {
+        val prompt = qualityPrompt.value ?: return
+        val option = prompt.options.getOrNull(prompt.selected) ?: return
+        qualityPrompt.value = null
+        viewModelScope.launch {
+            val headers = prompt.headers + buildMap {
+                put(HlsHeaders.VARIANT, option.variantUri)
+                option.audioUri?.let { put(HlsHeaders.AUDIO, it) }
+            }
+            app.manager.enqueue(prompt.item.url, headers, prompt.name)
+            message.value = "Queued ${prompt.name}"
+        }
+    }
+
+    fun dismissQuality() {
+        qualityPrompt.value = null
     }
 
     fun clearMessage() {
         message.value = null
+    }
+
+    private suspend fun enqueuePlaylist(item: DetectedItem, filename: String, headers: Map<String, String>) {
+        if (HlsPlaylist.looksLikeDash(item.url)) {
+            message.value = "DASH is not supported yet."
+            return
+        }
+        try {
+            val text = withContext(Dispatchers.IO) { hlsHttp.fetchText(item.url, headers) }
+            when (val doc = HlsPlaylist.parse(text, item.url)) {
+                is HlsDocument.Master -> {
+                    if (doc.variants.isEmpty()) {
+                        message.value = "Master playlist has no variants"
+                        return
+                    }
+                    val best = doc.bestIndex()
+                    qualityPrompt.value = QualityPrompt(
+                        item = item,
+                        name = filename,
+                        headers = headers,
+                        options = doc.variants.mapIndexed { i, v ->
+                            HlsQualityOption(
+                                label = HlsPlaylist.qualityLabel(v, i == best),
+                                variantUri = v.uri,
+                                audioUri = doc.audioFor(v)?.uri,
+                            )
+                        },
+                        selected = best,
+                    )
+                }
+                is HlsDocument.Media -> {
+                    if (!doc.endList) {
+                        message.value = "Live HLS is not supported (no #EXT-X-ENDLIST)"
+                        return
+                    }
+                    app.manager.enqueue(item.url, headers, filename)
+                    message.value = "Queued $filename"
+                }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            message.value = EngineErrors.userMessage(e.message ?: e.javaClass.simpleName)
+        }
     }
 
     fun loadIfNeeded(tab: TabEntity, wv: WebView) {
@@ -389,3 +487,5 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 }
 
 private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
+
+private data class Quint<A, B, C, D, E>(val a: A, val b: B, val c: C, val d: D, val e: E)

@@ -27,6 +27,10 @@ data class RecordedHttpRequest(
  */
 class RangeTestServer : AutoCloseable {
     var body: ByteArray = ByteArray(0)
+    /** Path (no query) -> body. When non-empty, [body] is ignored and unknown paths 404. */
+    var assets: Map<String, ByteArray> = emptyMap()
+    /** Extra headers that must be present or the server answers 403. */
+    var requiredHeaders: Map<String, String> = emptyMap()
     var etag: String? = "\"m1-etag\""
     var lastModified: String? = "Wed, 01 Jan 2020 00:00:00 GMT"
     var rangeSupport: Boolean = true
@@ -120,7 +124,18 @@ class RangeTestServer : AutoCloseable {
             return
         }
 
-        val data = body
+        if (requiredHeaders.isNotEmpty()) {
+            val missing = requiredHeaders.any { (k, v) -> parsed.headers[k.lowercase()] != v }
+            if (missing) {
+                writeHeaders(output, 403, "Forbidden", emptyMap(), 0)
+                return
+            }
+        }
+
+        val data = dataFor(parsed.path) ?: run {
+            writeHeaders(output, 404, "Not Found", emptyMap(), 0)
+            return
+        }
         val rangeHeader = parsed.headers["range"]
         val ifRange = parsed.headers["if-range"]
         val ifRangeOk = when {
@@ -153,7 +168,7 @@ class RangeTestServer : AutoCloseable {
 
         val extra = mutableMapOf(
             "Accept-Ranges" to if (rangeSupport) "bytes" else "none",
-            "Content-Type" to contentType,
+            "Content-Type" to contentTypeFor(parsed.path),
         )
         etag?.let { extra["ETag"] = it }
         lastModified?.let { extra["Last-Modified"] = it }
@@ -201,7 +216,25 @@ class RangeTestServer : AutoCloseable {
                 headers[h.substring(0, colon).trim().lowercase()] = h.substring(colon + 1).trim()
             }
         }
-        return RecordedHttpRequest(parts[0], parts[1].substringBefore('?'), headers)
+        return RecordedHttpRequest(parts[0], parts[1], headers)
+    }
+
+    private fun dataFor(rawPath: String): ByteArray? {
+        if (assets.isEmpty()) return body
+        val path = rawPath.substringBefore('?')
+        return assets[path]
+    }
+
+    private fun contentTypeFor(rawPath: String): String {
+        if (assets.isEmpty()) return contentType
+        val path = rawPath.substringBefore('?').lowercase()
+        return when {
+            path.endsWith(".m3u8") -> "application/vnd.apple.mpegurl"
+            path.endsWith(".mp4") || path.endsWith(".m4s") || path.endsWith(".m4a") -> "video/mp4"
+            path.endsWith(".key") -> "application/octet-stream"
+            path.endsWith(".aac") -> "audio/aac"
+            else -> "video/MP2T"
+        }
     }
 
     private fun readLine(input: InputStream): String? {

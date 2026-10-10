@@ -9,6 +9,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import dev.ahmed.spotter.MainActivity
+import dev.ahmed.spotter.engine.hls.HlsProgress
 import dev.ahmed.spotter.engine.model.DownloadRecord
 import dev.ahmed.spotter.engine.model.DownloadState
 
@@ -52,6 +53,8 @@ object DownloadNotifier {
         val running = active.filter { it.state == DownloadState.RUNNING }
         val downloaded = running.sumOf { it.downloaded }
         val total = running.sumOf { it.size }
+        val hlsRunning = running.filter { HlsProgress.isSegmentMode(it) }
+        val fileRunning = running.filter { !HlsProgress.isSegmentMode(it) }
         val title = when {
             running.isEmpty() && active.isNotEmpty() -> "Waiting to download"
             running.size == 1 -> running[0].filename.ifBlank { "Downloading" }
@@ -60,8 +63,19 @@ object DownloadNotifier {
         }
         val text = when {
             running.isEmpty() -> "${active.size} queued"
-            total > 0 -> "${formatBytes(downloaded)} / ${formatBytes(total)}"
-            downloaded > 0 -> "${formatBytes(downloaded)} so far"
+            running.size == 1 && hlsRunning.size == 1 && hlsRunning[0].size > 0 ->
+                HlsProgress.line(hlsRunning[0].downloaded, hlsRunning[0].size)
+            fileRunning.isEmpty() && hlsRunning.isNotEmpty() && hlsRunning.all { it.size > 0 } -> {
+                val d = hlsRunning.sumOf { it.downloaded }
+                val t = hlsRunning.sumOf { it.size }
+                HlsProgress.line(d, t)
+            }
+            fileRunning.isNotEmpty() && fileRunning.sumOf { it.size } > 0 -> {
+                val d = fileRunning.sumOf { it.downloaded }
+                val t = fileRunning.sumOf { it.size }
+                "${formatBytes(d)} / ${formatBytes(t)}"
+            }
+            downloaded > 0 && hlsRunning.isEmpty() -> "${formatBytes(downloaded)} so far"
             else -> "Starting…"
         }
         val open = PendingIntent.getActivity(
