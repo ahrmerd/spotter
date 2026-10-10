@@ -15,7 +15,9 @@ object HttpClients {
     ): OkHttpClient = OkHttpClient.Builder()
         .followRedirects(true)
         .followSslRedirects(true)
-        .retryOnConnectionFailure(false)
+        // Retry stale keep-alive sockets (NAT/server idle close). HTTP 403/404 are
+        // not retried by this flag; the 403 no-storm test still holds.
+        .retryOnConnectionFailure(true)
         .connectTimeout(connectTimeoutSeconds, TimeUnit.SECONDS)
         .readTimeout(readTimeoutSeconds, TimeUnit.SECONDS)
         .writeTimeout(writeTimeoutSeconds, TimeUnit.SECONDS)

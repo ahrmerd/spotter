@@ -40,6 +40,8 @@ class RangeTestServer : AutoCloseable {
     var failAfterRequests: Int = Int.MAX_VALUE
     var failStatus: Int = 403
     var ifRangeHonored: Boolean = true
+    /** When true, responses use Connection: keep-alive and the socket stays open. */
+    var keepAlive: Boolean = false
 
     private val bytes = AtomicLong(0)
     private val requests = AtomicInteger(0)
@@ -50,6 +52,7 @@ class RangeTestServer : AutoCloseable {
 
     private val serverSocket = ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"))
     private val executor = Executors.newCachedThreadPool()
+    private val liveSockets = CopyOnWriteArrayList<Socket>()
     @Volatile private var running = true
 
     val port: Int get() = serverSocket.localPort
@@ -76,16 +79,34 @@ class RangeTestServer : AutoCloseable {
         recorded.clear()
     }
 
+    /** Close idle keep-alive sockets the way a NAT or server idle-timeout would. */
+    fun dropKeepAlives() {
+        for (s in liveSockets.toList()) {
+            try {
+                s.close()
+            } catch (_: Exception) {
+            }
+        }
+        liveSockets.clear()
+    }
+
     private fun handleSocket(socket: Socket) {
         socket.tcpNoDelay = true
+        liveSockets.add(socket)
         try {
-            socket.use { s ->
-                val input = BufferedInputStream(s.getInputStream())
-                val output = s.getOutputStream()
+            val input = BufferedInputStream(socket.getInputStream())
+            val output = socket.getOutputStream()
+            do {
                 handle(input, output)
-            }
+            } while (keepAlive && running && !socket.isClosed)
         } catch (_: Exception) {
             // client closed or we forced a disconnect
+        } finally {
+            liveSockets.remove(socket)
+            try {
+                socket.close()
+            } catch (_: Exception) {
+            }
         }
     }
 
@@ -206,7 +227,7 @@ class RangeTestServer : AutoCloseable {
         val sb = StringBuilder()
         sb.append("HTTP/1.1 ").append(status).append(' ').append(reason).append("\r\n")
         sb.append("Content-Length: ").append(contentLength).append("\r\n")
-        sb.append("Connection: close\r\n")
+        sb.append(if (keepAlive) "Connection: keep-alive\r\n" else "Connection: close\r\n")
         for ((k, v) in headers) {
             sb.append(k).append(": ").append(v).append("\r\n")
         }
@@ -247,6 +268,7 @@ class RangeTestServer : AutoCloseable {
 
     override fun close() {
         running = false
+        dropKeepAlives()
         try {
             serverSocket.close()
         } catch (_: Exception) {

@@ -101,6 +101,7 @@ class DownloadService : Service() {
             startForeground(DownloadNotifier.NOTIFICATION_ID, notification)
         }
         startedFg = true
+        DownloadNotifier.cancelWaiting(this)
     }
 
     private fun stopIdle() {
@@ -125,6 +126,16 @@ class DownloadService : Service() {
         const val ACTION_RESUME = "dev.ahmed.spotter.action.RESUME"
         private const val TAG = "Spotter"
 
+        fun notifyWaiting(context: Context) {
+            val app = context.applicationContext as? SpotterApp ?: return
+            app.appScope.launch(Dispatchers.IO) {
+                val has = app.store.getAll().any {
+                    it.state == DownloadState.QUEUED || it.state == DownloadState.RUNNING
+                }
+                if (has) DownloadNotifier.showWaiting(app)
+            }
+        }
+
         fun start(context: Context) {
             val app = context.applicationContext
             val intent = Intent(app, DownloadService::class.java)
@@ -135,9 +146,10 @@ class DownloadService : Service() {
                     app.startService(intent)
                 }
             } catch (e: IllegalStateException) {
-                // Android 12+ refuses FGS from many background contexts. Leave rows QUEUED;
-                // opening the app (or a WorkManager exemption) can start us later.
+                // Android 12+ refuses FGS from many background contexts. Leave rows QUEUED
+                // and tell the user to open the app (A2).
                 Log.w(TAG, "DownloadService start not allowed from this context", e)
+                notifyWaiting(app)
             }
         }
     }

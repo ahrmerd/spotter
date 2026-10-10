@@ -5,6 +5,7 @@ import dev.ahmed.spotter.engine.http.HttpStatusException
 import dev.ahmed.spotter.engine.http.NeedsRefreshException
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.IOException
 
 data class ProbeResult(
     val size: Long?,
@@ -20,6 +21,23 @@ class RangeProbe(private val client: OkHttpClient) {
         url: String,
         capturedHeaders: Map<String, String>,
         extra: Map<String, String> = emptyMap(),
+    ): ProbeResult {
+        var lastIo: IOException? = null
+        repeat(3) { attempt ->
+            try {
+                return probeOnce(url, capturedHeaders, extra)
+            } catch (e: IOException) {
+                lastIo = e
+                client.connectionPool.evictAll()
+            }
+        }
+        throw lastIo ?: IOException("probe failed")
+    }
+
+    private fun probeOnce(
+        url: String,
+        capturedHeaders: Map<String, String>,
+        extra: Map<String, String>,
     ): ProbeResult {
         val headers = HeaderUtils.merge(capturedHeaders, extra + ("Range" to "bytes=0-0"))
         val req = Request.Builder().url(url).get().apply {

@@ -1,5 +1,6 @@
 package dev.ahmed.spotter.engine
 
+import dev.ahmed.spotter.engine.http.PartPlanner
 import dev.ahmed.spotter.engine.model.DownloadState
 import dev.ahmed.spotter.engine.model.EngineSettings
 import dev.ahmed.spotter.engine.net.HttpClients
@@ -71,7 +72,31 @@ class M1AcceptanceTest {
         assertEquals(expected, actual)
         val parts = store.getParts(id)
         // Initial split is 4; work stealing can add a fifth if one part finishes early.
+        val planned = PartPlanner.initialParts(body.size.toLong(), ranged = true, connections = 4)
+        assertEquals(4, planned.size)
+        val rangeStarts = server.recorded.mapNotNull { req ->
+            req.headers["range"]?.removePrefix("bytes=")?.substringBefore('-')?.toLongOrNull()
+        }.toSet()
+        for (p in planned) {
+            assertTrue("missing initial range start ${p.start} in $rangeStarts", p.start in rangeStarts)
+        }
         assertTrue("expected at least 4 parts, got ${parts.size}", parts.size >= 4)
+    }
+
+    @Test
+    fun secondDownloadSurvivesStaleKeepAlive() = runBlocking {
+        server.keepAlive = true
+        val body = randomBytes(256 * 1024, seed = 11)
+        server.body = body
+        val first = manager.enqueue(server.url("/keep.bin"), filename = "keep.bin")
+        val rec1 = store.waitTerminal(first, timeoutMs = 30_000)
+        assertEquals(rec1.error, DownloadState.DONE, rec1.state)
+        server.dropKeepAlives()
+        val second = manager.enqueue(server.url("/keep.bin"), filename = "keep2.bin")
+        val rec2 = store.waitTerminal(second, timeoutMs = 30_000)
+        println("M1 stale-keepalive second state=${rec2.state} error=${rec2.error} requests=${server.requestCount}")
+        assertEquals(rec2.error, DownloadState.DONE, rec2.state)
+        assertEquals(sha256(body), sha256(File(rec2.outputPath)))
     }
 
     @Test

@@ -1,5 +1,6 @@
 package dev.ahmed.spotter.engine.queue
 
+import dev.ahmed.spotter.engine.EngineErrors
 import dev.ahmed.spotter.engine.EngineLog
 import dev.ahmed.spotter.engine.Filenames
 import dev.ahmed.spotter.engine.http.DownloadOutcome
@@ -371,7 +372,7 @@ class DownloadManager(
                 logger.error("job failed $id", e)
                 val rec2 = store.get(id)
                 if (rec2 != null && rec2.state == DownloadState.RUNNING) {
-                    store.update(rec2.copy(state = DownloadState.ERROR, error = e.message ?: e.javaClass.simpleName))
+                    store.update(rec2.copy(state = DownloadState.ERROR, error = EngineErrors.userMessage(e.message ?: e.javaClass.simpleName)))
                 }
             } finally {
                 running.decrementAndGet()
@@ -392,7 +393,7 @@ class DownloadManager(
                 rec.copy(state = DownloadState.NEEDS_REFRESH, error = outcome.message),
             )
             is DownloadOutcome.Failed -> store.update(
-                rec.copy(state = DownloadState.ERROR, error = outcome.error),
+                rec.copy(state = DownloadState.ERROR, error = EngineErrors.userMessage(outcome.error)),
             )
         }
     }

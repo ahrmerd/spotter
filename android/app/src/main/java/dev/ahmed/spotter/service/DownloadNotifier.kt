@@ -14,23 +14,36 @@ import dev.ahmed.spotter.engine.model.DownloadState
 
 object DownloadNotifier {
     const val CHANNEL_ID = "spotter_downloads"
+    const val WAITING_CHANNEL_ID = "spotter_waiting"
     const val NOTIFICATION_ID = 1
+    const val WAITING_ID = 3
 
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < 26) return
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val existing = nm.getNotificationChannel(CHANNEL_ID)
-        if (existing != null) return
-        nm.createNotificationChannel(
-            NotificationChannel(
-                CHANNEL_ID,
-                "Downloads",
-                NotificationManager.IMPORTANCE_LOW,
-            ).apply {
-                description = "Download progress"
-                setShowBadge(false)
-            },
-        )
+        if (nm.getNotificationChannel(CHANNEL_ID) == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_ID,
+                    "Downloads",
+                    NotificationManager.IMPORTANCE_LOW,
+                ).apply {
+                    description = "Download progress"
+                    setShowBadge(false)
+                },
+            )
+        }
+        if (nm.getNotificationChannel(WAITING_CHANNEL_ID) == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(
+                    WAITING_CHANNEL_ID,
+                    "Downloads waiting",
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ).apply {
+                    description = "Tap to resume downloads the system would not start in the background"
+                },
+            )
+        }
     }
 
     fun build(context: Context, items: List<DownloadRecord>): Notification {
@@ -78,6 +91,38 @@ object DownloadNotifier {
             builder.setProgress(0, 0, true)
         }
         return builder.build()
+    }
+
+    fun waiting(context: Context): Notification {
+        ensureChannel(context)
+        val open = PendingIntent.getActivity(
+            context,
+            3,
+            Intent(context, MainActivity::class.java).addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP,
+            ),
+            PendingIntent.FLAG_UPDATE_CURRENT or immutable(),
+        )
+        return NotificationCompat.Builder(context, WAITING_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setContentTitle("Downloads waiting")
+            .setContentText("Tap to resume")
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setOngoing(false)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .build()
+    }
+
+    fun showWaiting(context: Context) {
+        ensureChannel(context)
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(WAITING_ID, waiting(context))
+    }
+
+    fun cancelWaiting(context: Context) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.cancel(WAITING_ID)
     }
 
     fun idle(context: Context): Notification {

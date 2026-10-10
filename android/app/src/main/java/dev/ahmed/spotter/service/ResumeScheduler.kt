@@ -5,7 +5,6 @@ import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import dev.ahmed.spotter.engine.model.EngineSettings
 
@@ -14,9 +13,8 @@ object ResumeScheduler {
     const val UNIQUE_NETWORK = "spotter-resume-network"
 
     fun enqueueNow(context: Context) {
-        val req = OneTimeWorkRequestBuilder<ResumeWorker>()
-            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-            .build()
+        // Regular work, not expedited dataSync FGS: Android 15 refuses that from the background (A2).
+        val req = OneTimeWorkRequestBuilder<ResumeWorker>().build()
         WorkManager.getInstance(context).enqueueUniqueWork(UNIQUE_RESUME, ExistingWorkPolicy.REPLACE, req)
     }
 

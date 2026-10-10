@@ -239,7 +239,7 @@ fun DownloadsScreen(
     }
     removeTarget?.let { target ->
         RemoveDialog(
-            filename = target.record.filename.ifBlank { target.record.url },
+            filename = target.record.filename.ifBlank { displayFilename(target.record.url) },
             canDeleteFile = target.record.state == DownloadState.DONE && target.record.outputPath.isNotEmpty(),
             onDismiss = { removeTarget = null },
             onRemove = { delete ->
@@ -283,7 +283,7 @@ private fun DownloadRow(
     val indeterminate = rec.state == DownloadState.RUNNING && rec.size <= 0
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
         Text(
-            rec.filename.ifBlank { rec.url },
+            rec.filename.ifBlank { displayFilename(rec.url) },
             style = MaterialTheme.typography.titleMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -425,4 +425,10 @@ private fun RemoveDialog(
         confirmButton = { TextButton({ onRemove(deleteFile) }) { Text("Remove") } },
         dismissButton = { TextButton(onDismiss) { Text("Cancel") } },
     )
+}
+
+private fun displayFilename(url: String): String {
+    val path = dev.ahmed.spotter.engine.Filenames.urlPathName(url)
+    if (path.isNotBlank()) return path
+    return url.substringAfter("://").substringBefore('/').ifBlank { url }
 }
