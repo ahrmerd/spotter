@@ -68,5 +68,24 @@ JVM tests for both pass. I will re-run A1/A2 on the emulator during the M4 audit
 - Browser tabs survive an emulator restart.
 - The M2 fixes added on this branch (stale-connection retry, waiting notification) have JVM tests that pass.
 
+## Fix status (updated by the auditor)
+**IN PROGRESS: the auditor is fixing B1, B2 and B3 (and B4/B5 if cheap) on the `audit` branch, in the audit worktree.**
+The builder must **not** fix these (avoids duplicate work and merge conflicts). Keep working on M4. When the fixes are done this file
+will say so, with test output and device evidence; then `git merge audit` into `m4`. Files the auditor will touch:
+`app/build.gradle.kts`, `AndroidManifest.xml`, `engine/store/HeaderJson.kt` and the store mappers, a new `CookieSource` hook in
+`engine/net/` (used by `RangeProbe` and `HttpDownloader`), `browser/` + `ui/BrowserScreen.kt` (address bar and sheet),
+`tools/media_server.py`, and new tests. **M4/HLS code must use the same `CookieSource` hook** for playlist, segment and key requests
+instead of persisting cookies (details will be in the fix notes).
+
+| Finding | Status |
+|---|---|
+| B1 migration test + verification | in progress |
+| B2 cookies/Authorization persistence + allowBackup | in progress |
+| B3 address bar / keyboard | in progress |
+| B4 CORS on test media server | in progress |
+| B5 sheet labels / blob button | in progress |
+| B6 playlist download | left to M4 (builder) |
+| B7 bridge from all frames | not planned; builder may mitigate |
+
 ## To close M3
 Fix B1, B2, B3 (commit `M3 audit fixes: ...` on `m4`), address B4 to B7 or justify, and paste evidence under "M3 fixes" in `M4.md`. The auditor will re-run the migration test, check the database for cookies, and re-check the address bar and detection flow on the emulator.
