@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -17,8 +19,32 @@ android {
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+    // Release signing: the key never lives in the repository. Put its location in android/keystore.properties
+    // (git-ignored) or pass SPOTTER_KEYSTORE / SPOTTER_KEYSTORE_PASSWORD / SPOTTER_KEY_ALIAS / SPOTTER_KEY_PASSWORD.
+    // Without either, `assembleRelease` produces an unsigned APK. See android/README.md.
+    val keystoreProps = Properties().apply {
+        val f = rootProject.file("keystore.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
+    fun signing(name: String, env: String): String? = keystoreProps.getProperty(name) ?: System.getenv(env)
+    val releaseKeystore = signing("storeFile", "SPOTTER_KEYSTORE")
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = signing("storePassword", "SPOTTER_KEYSTORE_PASSWORD")
+                keyAlias = signing("keyAlias", "SPOTTER_KEY_ALIAS")
+                keyPassword = signing("keyPassword", "SPOTTER_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
-        release { isMinifyEnabled = false }
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfigs.findByName("release")?.let { signingConfig = it }
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
