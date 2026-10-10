@@ -70,6 +70,7 @@ class InMemoryDownloadStore : DownloadStore {
                 ?: EngineSettings.DEFAULT_MAX_CONNECTIONS,
             speedLimitBps = settings[EngineSettings.KEY_SPEED_LIMIT_BPS]?.toLongOrNull() ?: 0L,
             wifiOnly = settings[EngineSettings.KEY_WIFI_ONLY]?.toBooleanStrictOrNull() ?: false,
+            resumeOnBoot = settings[EngineSettings.KEY_RESUME_ON_BOOT]?.toBooleanStrictOrNull() ?: false,
         )
     }
 

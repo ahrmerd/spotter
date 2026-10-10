@@ -62,6 +62,7 @@ class RoomDownloadStore(private val db: SpotterDatabase) : DownloadStore {
                 ?: EngineSettings.DEFAULT_MAX_CONNECTIONS,
             speedLimitBps = rows[EngineSettings.KEY_SPEED_LIMIT_BPS]?.toLongOrNull() ?: 0L,
             wifiOnly = rows[EngineSettings.KEY_WIFI_ONLY]?.toBooleanStrictOrNull() ?: false,
+            resumeOnBoot = rows[EngineSettings.KEY_RESUME_ON_BOOT]?.toBooleanStrictOrNull() ?: false,
         )
     }
 }

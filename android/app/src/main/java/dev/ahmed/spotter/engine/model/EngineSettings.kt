@@ -6,6 +6,7 @@ data class EngineSettings(
     val maxTotalConnections: Int = DEFAULT_MAX_CONNECTIONS,
     val speedLimitBps: Long = 0,
     val wifiOnly: Boolean = false,
+    val resumeOnBoot: Boolean = false,
 ) {
     companion object {
         const val DEFAULT_MAX_CONCURRENT = 3
@@ -19,6 +20,7 @@ data class EngineSettings(
         const val KEY_MAX_TOTAL_CONNECTIONS = "max_total_connections"
         const val KEY_SPEED_LIMIT_BPS = "speed_limit_bps"
         const val KEY_WIFI_ONLY = "wifi_only"
+        const val KEY_RESUME_ON_BOOT = "resume_on_boot"
     }
 
     fun connectionsPerFileCapped(): Int =

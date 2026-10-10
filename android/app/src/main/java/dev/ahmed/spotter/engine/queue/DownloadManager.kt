@@ -17,20 +17,20 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.withContext
-import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 class DownloadManager(
     private val store: DownloadStore,
@@ -52,7 +52,7 @@ class DownloadManager(
         connectionLimiter = connectionLimiter,
         ioDispatcher = ioDispatcher,
     )
-    private val sinks = sinkFactory ?: FileSinkFactory { filename, resumePath ->
+    private val sinks = sinkFactory ?: FileSinkFactory { filename, resumePath, _ ->
         PrivateFileSink.forName(outputDir, filename, resumePath)
     }
     private val jobs = ConcurrentHashMap<Long, Job>()
@@ -130,15 +130,132 @@ class DownloadManager(
         }
     }
 
+    suspend fun pauseAll() {
+        for (rec in store.getAll()) {
+            if (rec.state == DownloadState.QUEUED || rec.state == DownloadState.RUNNING) {
+                pause(rec.id)
+            }
+        }
+    }
+
+    /**
+     * Abort an unfinished download: stop the job, drop the partial file, remove the row.
+     * Finished files are left alone; use [remove] with deleteFile for those.
+     */
+    suspend fun cancel(id: Long) {
+        val rec = store.get(id) ?: return
+        if (rec.state == DownloadState.DONE) return
+        resumeAfterStop.remove(id)
+        val job = jobs[id]
+        if (job != null) {
+            stop[id] = StopReason.Cancel
+            job.cancel()
+            job.join()
+        }
+        withContext(NonCancellable) {
+            val latest = store.get(id) ?: return@withContext
+            if (latest.state == DownloadState.DONE) return@withContext
+            discardPartial(latest)
+            store.delete(id)
+        }
+    }
+
+    suspend fun cancelRunning() {
+        for (rec in store.getAll()) {
+            if (rec.state == DownloadState.QUEUED || rec.state == DownloadState.RUNNING) {
+                cancel(rec.id)
+            }
+        }
+    }
+
+    /**
+     * Remove the row. Partial files are always dropped (they are ours). A finished user file is
+     * deleted only when [deleteFile] is true.
+     */
+    suspend fun remove(id: Long, deleteFile: Boolean) {
+        val rec = store.get(id) ?: return
+        val finished = rec.state == DownloadState.DONE
+        resumeAfterStop.remove(id)
+        val job = jobs[id]
+        if (job != null) {
+            stop[id] = StopReason.Cancel
+            job.cancel()
+            job.join()
+        }
+        withContext(NonCancellable) {
+            val latest = store.get(id) ?: return@withContext
+            val nowFinished = latest.state == DownloadState.DONE
+            if (!nowFinished) discardPartial(latest)
+            if (deleteFile && (finished || nowFinished)) deleteFinished(latest)
+            store.delete(id)
+        }
+    }
+
+    suspend fun deleteDownloadedFile(id: Long) {
+        val rec = store.get(id) ?: return
+        if (rec.state == DownloadState.RUNNING && jobs.containsKey(id)) return
+        if (rec.state == DownloadState.DONE) {
+            deleteFinished(rec)
+            store.update(rec.copy(outputPath = ""))
+        } else {
+            discardPartial(rec)
+        }
+    }
+
+    suspend fun retry(id: Long) {
+        val rec = store.get(id) ?: return
+        when (rec.state) {
+            DownloadState.ERROR, DownloadState.NEEDS_REFRESH, DownloadState.PAUSED -> {
+                store.update(rec.copy(state = DownloadState.QUEUED, error = null))
+                pump()
+            }
+            else -> resume(id)
+        }
+    }
+
+    suspend fun rename(id: Long, newName: String): String = nameLock.withLock {
+        val rec = store.get(id) ?: return@withLock ""
+        if (rec.state == DownloadState.RUNNING) return@withLock rec.filename
+        val sanitized = Filenames.ensureExtension(Filenames.sanitize(newName), rec.mimeType, rec.url)
+        val name = uniqueFilename(sanitized, exceptId = id)
+        val newPath = sinks.rename(rec.outputPath, name)
+        store.update(
+            rec.copy(
+                filename = name,
+                outputPath = newPath.ifEmpty { rec.outputPath },
+            ),
+        )
+        name
+    }
+
+    /**
+     * Called from the network callback. Airplane / lost network, or Wi-Fi-only on cellular,
+     * yields running jobs to QUEUED so they resume without a user tap when the allowed
+     * network returns.
+     */
+    suspend fun notifyNetworkChanged() {
+        val settings = store.loadSettings()
+        if (networkBlocked(settings)) {
+            yieldRunningToQueue()
+        } else {
+            pump()
+        }
+    }
+
     suspend fun setSettings(settings: EngineSettings) {
         store.setSetting(EngineSettings.KEY_MAX_CONCURRENT, settings.maxConcurrentDownloads.toString())
         store.setSetting(EngineSettings.KEY_CONNECTIONS_PER_FILE, settings.connectionsPerFile.toString())
         store.setSetting(EngineSettings.KEY_MAX_TOTAL_CONNECTIONS, settings.maxTotalConnections.toString())
         store.setSetting(EngineSettings.KEY_SPEED_LIMIT_BPS, settings.speedLimitBps.toString())
         store.setSetting(EngineSettings.KEY_WIFI_ONLY, settings.wifiOnly.toString())
+        store.setSetting(EngineSettings.KEY_RESUME_ON_BOOT, settings.resumeOnBoot.toString())
         tokenBucket.setRate(settings.speedLimitBps)
         applyConnectionCap(settings.maxTotalConnections)
-        pump()
+        if (networkBlocked(settings)) {
+            yieldRunningToQueue()
+        } else {
+            pump()
+        }
     }
 
     // Holders of the old semaphore release into it, so the cap converges as in-flight requests finish.
@@ -172,15 +289,43 @@ class DownloadManager(
             lock.withLock {
                 val settings = store.loadSettings()
                 tokenBucket.setRate(settings.speedLimitBps)
-                if (settings.wifiOnly && !networkPolicy.canDownload()) return@withLock
+                if (networkBlocked(settings)) return@withLock
                 val max = settings.maxConcurrentCapped()
                 val queued = store.getAll().filter { it.state == DownloadState.QUEUED }
                     .sortedBy { it.createdAt }
                 for (item in queued) {
                     if (jobs.size >= max) break
-                    if (settings.wifiOnly && !networkPolicy.canDownload()) break
+                    if (networkBlocked(settings)) break
                     startJob(item.id)
                 }
+            }
+        }
+    }
+
+    private fun networkBlocked(settings: EngineSettings): Boolean {
+        if (!networkPolicy.isOnline()) return true
+        return settings.wifiOnly && !networkPolicy.canDownload()
+    }
+
+    /** Yield running jobs to QUEUED (system timeout / network). They resume on the next pump. */
+    suspend fun parkRunning() = yieldRunningToQueue()
+
+    /**
+     * Stop running jobs as QUEUED (not user-PAUSED) so a later pump resumes them.
+     */
+    private suspend fun yieldRunningToQueue() {
+        val live = jobs.keys.mapNotNull { id -> jobs[id]?.let { id to it } }
+        for ((id, job) in live) {
+            resumeAfterStop.remove(id)
+            stop[id] = StopReason.Network
+            job.cancel()
+        }
+        for ((_, job) in live) {
+            job.join()
+        }
+        for (rec in store.getAll()) {
+            if (rec.state == DownloadState.RUNNING && !jobs.containsKey(rec.id)) {
+                store.update(rec.copy(state = DownloadState.QUEUED))
             }
         }
     }
@@ -213,6 +358,8 @@ class DownloadManager(
                             StopReason.Pause -> store.update(
                                 rec2.copy(state = if (resumeAfterStop.remove(id)) DownloadState.QUEUED else DownloadState.PAUSED),
                             )
+                            StopReason.Network -> store.update(rec2.copy(state = DownloadState.QUEUED))
+                            StopReason.Cancel -> Unit // caller deletes the row
                             StopReason.Kill -> store.update(rec2.copy(state = DownloadState.RUNNING))
                         }
                     }
@@ -251,12 +398,7 @@ class DownloadManager(
     }
 
     private suspend fun allocateName(downloadId: Long, suggested: String): String = nameLock.withLock {
-        val existing = store.getAll().map { it.filename }.filter { it.isNotEmpty() }.toHashSet()
-        val name = Filenames.unique(suggested) { candidate ->
-            candidate in existing ||
-                File(outputDir, candidate).exists() ||
-                File(outputDir, "$candidate.part").exists()
-        }
+        val name = uniqueFilename(suggested, exceptId = downloadId)
         val rec = store.get(downloadId)
         if (rec != null) {
             store.update(rec.copy(filename = name))
@@ -264,5 +406,37 @@ class DownloadManager(
         name
     }
 
-    private enum class StopReason { Pause, Kill }
+    private suspend fun uniqueFilename(suggested: String, exceptId: Long): String {
+        val existing = store.getAll().filter { it.id != exceptId }.map { it.filename }.filter { it.isNotEmpty() }.toHashSet()
+        return Filenames.unique(suggested) { candidate ->
+            candidate in existing ||
+                File(outputDir, candidate).exists() ||
+                File(outputDir, "$candidate.part").exists() ||
+                sinks.nameTaken(candidate)
+        }
+    }
+
+    private fun discardPartial(rec: DownloadRecord) {
+        try {
+            sinks.deletePartial(rec.outputPath, rec.filename)
+        } catch (e: Exception) {
+            logger.warn("delete partial failed id=${rec.id}", e)
+        }
+        if (rec.filename.isNotEmpty()) {
+            File(outputDir, "${rec.filename}.part").takeIf { it.exists() }?.delete()
+        }
+    }
+
+    private fun deleteFinished(rec: DownloadRecord) {
+        try {
+            sinks.deleteFinished(rec.outputPath)
+        } catch (e: Exception) {
+            logger.warn("delete finished failed id=${rec.id}", e)
+        }
+        if (rec.outputPath.isNotEmpty() && !rec.outputPath.startsWith("content:")) {
+            File(rec.outputPath).takeIf { it.exists() }?.delete()
+        }
+    }
+
+    private enum class StopReason { Pause, Kill, Network, Cancel }
 }

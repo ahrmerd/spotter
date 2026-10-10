@@ -70,7 +70,8 @@ class M1AcceptanceTest {
         println("M1 100MB sha256 source=$expected output=$actual size=${out.length()} requests=${server.requestCount} bytesServed=${server.bytesServed}")
         assertEquals(expected, actual)
         val parts = store.getParts(id)
-        assertEquals(4, parts.size)
+        // Initial split is 4; work stealing can add a fifth if one part finishes early.
+        assertTrue("expected at least 4 parts, got ${parts.size}", parts.size >= 4)
     }
 
     @Test

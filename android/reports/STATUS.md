@@ -4,7 +4,7 @@
 |---|---|---|---|
 | M0 scaffold (Compose shell, builds) | PASS (checked by owner's assistant: assembleDebug OK) | 2026-10-10 | 0 |
 | M1 Engine core | PASS (after audit fixes F1-F8; F7 Wi-Fi-pause deferred to M2) | 2026-10-10 | 0 open (1 deferred) |
-| M2 Service + Downloads UI | not started | | |
+| M2 Service + Downloads UI | in audit | 2026-10-10 | emulator/instrumented/MANUAL NOT RUN (disk) |
 | M3 Browser + sniffer | not started | | |
 | M4 HLS | not started | | |
 | M5 Settings + polish | not started | | |

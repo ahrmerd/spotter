@@ -83,10 +83,39 @@ class MediaStoreSink(
     }
 
     companion object {
+        const val RELATIVE_DIR = "Download/Spotter/"
+
+        @RequiresApi(29)
+        fun open(
+            resolver: ContentResolver,
+            displayName: String,
+            resumePath: String,
+            mimeType: String?,
+        ): MediaStoreSink {
+            if (resumePath.startsWith("content:")) {
+                val existing = openExisting(resolver, Uri.parse(resumePath))
+                if (existing != null) return existing
+            }
+            return create(resolver, displayName, mimeType)
+        }
+
+        @RequiresApi(29)
+        fun openExisting(resolver: ContentResolver, uri: Uri): MediaStoreSink? {
+            return try {
+                val pfd = resolver.openFileDescriptor(uri, "rw") ?: return null
+                MediaStoreSink(resolver, uri, pfd)
+            } catch (e: SecurityException) {
+                null
+            } catch (e: java.io.FileNotFoundException) {
+                null
+            }
+        }
+
         @RequiresApi(29)
         fun create(resolver: ContentResolver, displayName: String, mimeType: String?): MediaStoreSink {
+            val unique = uniqueDisplayName(resolver, displayName)
             val values = ContentValues().apply {
-                put(MediaStore.Downloads.DISPLAY_NAME, displayName)
+                put(MediaStore.Downloads.DISPLAY_NAME, unique)
                 put(MediaStore.Downloads.MIME_TYPE, mimeType ?: "application/octet-stream")
                 put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Spotter")
                 put(MediaStore.Downloads.IS_PENDING, 1)
@@ -96,6 +125,49 @@ class MediaStoreSink(
             val pfd = resolver.openFileDescriptor(uri, "rw")
                 ?: throw IOException("MediaStore open failed for $uri")
             return MediaStoreSink(resolver, uri, pfd)
+        }
+
+        @RequiresApi(29)
+        fun uniqueDisplayName(resolver: ContentResolver, desired: String): String {
+            val taken = takenNames(resolver)
+            return dev.ahmed.spotter.engine.Filenames.unique(desired) { it in taken }
+        }
+
+        @RequiresApi(29)
+        fun takenNames(resolver: ContentResolver): Set<String> {
+            val taken = hashSetOf<String>()
+            val dir = Environment.DIRECTORY_DOWNLOADS + "/Spotter"
+            resolver.query(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.Downloads.DISPLAY_NAME),
+                "${MediaStore.Downloads.RELATIVE_PATH} IN (?, ?)",
+                arrayOf(dir, "$dir/"),
+                null,
+            )?.use { c ->
+                val idx = c.getColumnIndexOrThrow(MediaStore.Downloads.DISPLAY_NAME)
+                while (c.moveToNext()) {
+                    val name = c.getString(idx) ?: continue
+                    taken.add(name)
+                }
+            }
+            return taken
+        }
+
+        @RequiresApi(29)
+        fun deleteUri(resolver: ContentResolver, resumePath: String) {
+            if (!resumePath.startsWith("content:")) return
+            resolver.delete(Uri.parse(resumePath), null, null)
+        }
+
+        @RequiresApi(29)
+        fun renameUri(resolver: ContentResolver, resumePath: String, newName: String): String {
+            if (!resumePath.startsWith("content:")) return resumePath
+            val uri = Uri.parse(resumePath)
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, newName)
+            }
+            resolver.update(uri, values, null, null)
+            return resumePath
         }
     }
 }

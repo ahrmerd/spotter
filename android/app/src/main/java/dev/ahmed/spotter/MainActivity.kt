@@ -1,8 +1,15 @@
 package dev.ahmed.spotter
 
+import android.Manifest
+import android.content.ClipboardManager
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -17,29 +24,108 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.core.content.ContextCompat
+import dev.ahmed.spotter.ui.DownloadsScreen
+import dev.ahmed.spotter.ui.DownloadsViewModel
+import dev.ahmed.spotter.ui.ShareUrls
 
 class MainActivity : ComponentActivity() {
+    private val downloadsVm: DownloadsViewModel by viewModels()
+    private var shareUrl by mutableStateOf<String?>(null)
+    private var clipboardUrl by mutableStateOf<String?>(null)
+    private var lastClipboardOffered: String? = null
+
+    private val notifyPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { /* FGS still runs if denied; the shade simply hides the notification. */ }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme { App() } }
+        requestNotifyPermission()
+        handleSend(intent)
+        setContent {
+            MaterialTheme {
+                var tab by rememberSaveable { mutableIntStateOf(0) }
+                Scaffold(bottomBar = {
+                    NavigationBar {
+                        NavigationBarItem(
+                            selected = tab == 0,
+                            onClick = { tab = 0 },
+                            icon = { Icon(Icons.Default.Download, null) },
+                            label = { Text("Downloads") },
+                        )
+                        NavigationBarItem(
+                            selected = tab == 1,
+                            onClick = { tab = 1 },
+                            icon = { Icon(Icons.Default.Public, null) },
+                            label = { Text("Browser") },
+                        )
+                    }
+                }) { pad ->
+                    Box(Modifier.fillMaxSize().padding(pad)) {
+                        if (tab == 0) {
+                            DownloadsScreen(
+                                vm = downloadsVm,
+                                shareUrl = shareUrl,
+                                clipboardUrl = clipboardUrl,
+                                onShareConsumed = { shareUrl = null },
+                                onClipboardConsumed = { clipboardUrl = null },
+                            )
+                        } else {
+                            Box(Modifier.fillMaxSize(), Alignment.Center) {
+                                Text("Browser (todo)")
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
-}
 
-@androidx.compose.runtime.Composable
-private fun App() {
-    var tab by rememberSaveable { mutableIntStateOf(0) }
-    Scaffold(bottomBar = {
-        NavigationBar {
-            NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Icons.Default.Download, null) }, label = { Text("Downloads") })
-            NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Icons.Default.Public, null) }, label = { Text("Browser") })
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleSend(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        maybeOfferClipboard()
+    }
+
+    private fun handleSend(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND) return
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT)
+        val url = ShareUrls.extractHttpUrl(text) ?: return
+        shareUrl = url
+        downloadsVm.offerUrl(url)
+    }
+
+    private fun maybeOfferClipboard() {
+        val clip = getSystemService(ClipboardManager::class.java) ?: return
+        val text = try {
+            clip.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()
+        } catch (e: SecurityException) {
+            null
+        } ?: return
+        val url = ShareUrls.extractHttpUrl(text) ?: return
+        if (url == lastClipboardOffered) return
+        lastClipboardOffered = url
+        clipboardUrl = url
+    }
+
+    private fun requestNotifyPermission() {
+        if (Build.VERSION.SDK_INT < 33) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
         }
-    }) { pad ->
-        Box(Modifier.fillMaxSize().padding(pad), Alignment.Center) {
-            Text(if (tab == 0) "Downloads (todo)" else "Browser (todo)")
-        }
+        notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 }
