@@ -63,6 +63,10 @@ class HlsPlaylistTest {
         assertEquals("https://ex.test/hls/audio.m3u8", audio?.uri)
         assertEquals("Best (1280x720 · 2.5 Mbps)", HlsPlaylist.qualityLabel(best, best = true))
         assertEquals("640x360 · 800 kbps", HlsPlaylist.qualityLabel(master.variants[0], best = false))
+        assertEquals(1, master.preferredIndex("best"))
+        assertEquals(0, master.preferredIndex("480"))
+        assertEquals(1, master.preferredIndex("720"))
+        assertEquals(1, master.preferredIndex("1080"))
     }
 
     @Test

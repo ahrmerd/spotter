@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.ahmed.spotter.engine.model.DownloadRecord
 import dev.ahmed.spotter.engine.model.DownloadState
+import dev.ahmed.spotter.engine.model.EngineSettings
 import dev.ahmed.spotter.engine.model.PartRecord
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -130,5 +131,24 @@ class RoomDownloadStoreTest {
             c.moveToFirst(); c.getString(0)
         }
         assertTrue(raw, !raw.contains("SECRET"))
+    }
+
+    @Test
+    fun settingsSurviveReload() = runBlocking {
+        val saved = EngineSettings(
+            maxConcurrentDownloads = 4,
+            connectionsPerFile = 7,
+            maxTotalConnections = 28,
+            speedLimitBps = 1024 * 1024,
+            wifiOnly = true,
+            resumeOnBoot = true,
+            defaultHlsQuality = "480",
+            notificationsEnabled = false,
+            theme = EngineSettings.THEME_DARK,
+            saveFolderUri = "content://tree/primary:Movies",
+            batteryPromptDone = true,
+        )
+        for ((k, v) in saved.toRows()) store.setSetting(k, v)
+        assertEquals(saved, store.loadSettings())
     }
 }

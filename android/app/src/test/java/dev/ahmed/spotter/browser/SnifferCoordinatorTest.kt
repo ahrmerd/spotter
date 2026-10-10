@@ -87,4 +87,27 @@ class SnifferCoordinatorTest {
         c.onIntercept(1, "file:///sdcard/x.mp4", emptyMap(), "https://p/", "T")
         assertTrue(c.items(1).isEmpty())
     }
+
+    @Test
+    fun ignoresJsFromAdFrames() {
+        val c = coordinator()
+        c.onJs(
+            1,
+            "https://cdn.example/ad.mp4",
+            "https://watch.example/ep",
+            "T",
+            play = false,
+            frameOrigin = "https://pagead2.googlesyndication.com",
+        )
+        assertTrue(c.items(1).isEmpty())
+        c.onJs(
+            1,
+            "https://cdn.example/real.mp4",
+            "https://watch.example/ep",
+            "T",
+            play = true,
+            frameOrigin = "https://kwik.cx",
+        )
+        assertEquals(listOf("https://cdn.example/real.mp4"), c.items(1).map { it.url })
+    }
 }

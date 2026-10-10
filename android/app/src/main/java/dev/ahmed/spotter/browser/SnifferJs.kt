@@ -15,7 +15,7 @@ object SnifferJs {
       }
       if (!src) return;
       if (window.SpotterSniffer && SpotterSniffer.media) {
-        SpotterSniffer.media(String(src), play ? 'play' : '');
+        SpotterSniffer.media(String(src), play ? 'play' : '', String(location.origin || ''));
       }
     } catch (e) {}
   }

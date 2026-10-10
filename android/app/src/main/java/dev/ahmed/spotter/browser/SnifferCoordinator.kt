@@ -79,8 +79,10 @@ class SnifferCoordinator(
         pageUrl: String,
         pageTitle: String,
         play: Boolean,
+        frameOrigin: String = "",
     ) {
         if (!isHttpOrBlob(url)) return
+        if (AdFrames.ignore(frameOrigin, pageUrl)) return
         val merged = HeaderCapture.mergeCookie(emptyMap(), cookieOf(url))
         val item = state.observe(
             tabId = tabId,

@@ -13,7 +13,17 @@ class EngineErrorsTest {
     }
 
     @Test
-    fun keepsUnknown() {
-        assertEquals("Probe HTTP 418", EngineErrors.userMessage("Probe HTTP 418"))
+    fun mapsHttpAndSpaceAndDoesNotLeakRawExceptions() {
+        assertEquals("Server error (418)", EngineErrors.userMessage("Probe HTTP 418"))
+        assertEquals(
+            "Access denied. Open the page in the browser and try again.",
+            EngineErrors.userMessage("HTTP 403"),
+        )
+        assertEquals(
+            "Not enough free space (need 10 MB, have 1 MB)",
+            EngineErrors.userMessage("Not enough free space (need 10 MB, have 1 MB)"),
+        )
+        assertEquals("Download failed", EngineErrors.userMessage("java.net.SocketException: boom"))
+        assertEquals("Live HLS is not supported", EngineErrors.userMessage("Live HLS is not supported (no #EXT-X-ENDLIST)"))
     }
 }

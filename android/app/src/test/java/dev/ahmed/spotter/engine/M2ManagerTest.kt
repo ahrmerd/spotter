@@ -148,6 +148,32 @@ class M2ManagerTest {
     }
 
     @Test
+    fun m5SettingsSurviveReload() = runBlocking {
+        val saved = EngineSettings(
+            maxConcurrentDownloads = 2,
+            connectionsPerFile = 6,
+            maxTotalConnections = 12,
+            speedLimitBps = 512 * 1024,
+            wifiOnly = true,
+            resumeOnBoot = true,
+            defaultHlsQuality = "720",
+            notificationsEnabled = false,
+            theme = EngineSettings.THEME_LIGHT,
+            saveFolderUri = "content://tree/primary:Movies",
+            batteryPromptDone = true,
+        )
+        manager.setSettings(saved)
+        val loaded = store.loadSettings()
+        assertEquals(saved, loaded)
+        manager.setSettings(loaded.copy(theme = EngineSettings.THEME_DARK, defaultHlsQuality = "1080"))
+        val again = store.loadSettings()
+        assertEquals(EngineSettings.THEME_DARK, again.theme)
+        assertEquals("1080", again.defaultHlsQuality)
+        assertEquals(512 * 1024L, again.speedLimitBps)
+        assertEquals(false, again.notificationsEnabled)
+    }
+
+    @Test
     fun parkRunningLeavesQueuedNotPaused() = runBlocking {
         val body = randomBytes(256 * 1024, seed = 25)
         server.body = body

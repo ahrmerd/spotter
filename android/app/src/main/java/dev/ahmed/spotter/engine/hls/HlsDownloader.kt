@@ -9,6 +9,8 @@ import dev.ahmed.spotter.engine.net.CookieSource
 import dev.ahmed.spotter.engine.net.TokenBucket
 import dev.ahmed.spotter.engine.sink.FileSink
 import dev.ahmed.spotter.engine.sink.FileSinkFactory
+import dev.ahmed.spotter.engine.sink.FreeSpace
+import dev.ahmed.spotter.engine.sink.InsufficientSpaceException
 import dev.ahmed.spotter.engine.store.DownloadStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -38,6 +40,7 @@ class HlsDownloader(
     private val remuxer: HlsRemuxer = KeepTsRemuxer,
     private val parallel: Int = DEFAULT_PARALLEL,
     cookies: CookieSource = CookieSource.NONE,
+    private val freeSpace: FreeSpace = FreeSpace.UNLIMITED,
 ) {
     private val http = HlsHttp(client, tokenBucket, connectionLimiter, cookies)
 
@@ -315,7 +318,18 @@ class HlsDownloader(
     }
 
     private fun copyToSink(src: File, sink: FileSink) {
-        sink.setLength(0)
+        freeSpace.check(src.length(), sink.outputPath)
+        try {
+            sink.setLength(0)
+        } catch (e: InsufficientSpaceException) {
+            throw e
+        } catch (e: IOException) {
+            val msg = e.message.orEmpty().lowercase()
+            if ("no space" in msg || "enospc" in msg) {
+                throw InsufficientSpaceException(src.length(), freeSpace.availableBytes(sink.outputPath))
+            }
+            throw e
+        }
         src.inputStream().use { input ->
             val buf = ByteArray(64 * 1024)
             var pos = 0L
