@@ -82,8 +82,13 @@ class HttpDownloader(
                 sink?.close()
                 sink = sinkFactory.open(record.filename, record.outputPath, record.mimeType)
                 val openSink = sink!!
-                if (record.outputPath.isEmpty() || record.outputPath != openSink.outputPath) {
-                    record = record.copy(outputPath = openSink.outputPath)
+                if (record.outputPath.isEmpty() || record.outputPath != openSink.outputPath ||
+                    (openSink.outputName.isNotEmpty() && openSink.outputName != record.filename)
+                ) {
+                    record = record.copy(
+                        outputPath = openSink.outputPath,
+                        filename = openSink.outputName.ifBlank { record.filename },
+                    )
                     store.update(record)
                 }
                 try {

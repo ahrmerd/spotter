@@ -16,6 +16,7 @@ class SafSink(
     private val resolver: ContentResolver,
     val uri: Uri,
     private val pfd: ParcelFileDescriptor,
+    override val outputName: String,
 ) : FileSink {
     private val channel = FileOutputStream(pfd.fileDescriptor).channel
     private var closed = false
@@ -90,7 +91,7 @@ class SafSink(
         fun openExisting(resolver: ContentResolver, uri: Uri): SafSink? {
             return try {
                 val pfd = resolver.openFileDescriptor(uri, "rw") ?: return null
-                SafSink(resolver, uri, pfd)
+                SafSink(resolver, uri, pfd, displayName(resolver, uri.toString()))
             } catch (e: SecurityException) {
                 null
             } catch (e: java.io.FileNotFoundException) {
@@ -111,7 +112,8 @@ class SafSink(
                 ?: throw IOException("SAF create failed for $displayName")
             val pfd = resolver.openFileDescriptor(created, "rw")
                 ?: throw IOException("SAF open failed for $created")
-            return SafSink(resolver, created, pfd)
+            val actual = displayName(resolver, created.toString()).ifBlank { unique }
+            return SafSink(resolver, created, pfd, actual)
         }
 
         fun nameTaken(resolver: ContentResolver, treeUri: String, filename: String): Boolean {

@@ -135,7 +135,14 @@ class HlsDownloader(
             }
         }
 
-        suspend fun persistLocked() {
+        var persistDirty = 0
+        var lastPersistAt = 0L
+        suspend fun persistLocked(force: Boolean = false) {
+            persistDirty++
+            val now = System.currentTimeMillis()
+            if (!force && persistDirty < 8 && now - lastPersistAt < 1_000) return
+            persistDirty = 0
+            lastPersistAt = now
             val done = items.indices.count { idx -> items[idx].countsForProgress && parts[idx].complete }.toLong()
             store.replaceParts(record.id, parts.map { it.toRecord(record.id) })
             store.update(record.copy(downloaded = done, mimeType = HlsHeaders.MIME_PLAYLIST, size = mediaCount.toLong()))
@@ -167,6 +174,7 @@ class HlsDownloader(
             }
         }
 
+        partsLock.withLock { persistLocked(force = true) }
         val complete = parts.count { it.complete }
         if (complete != items.size) {
             return DownloadOutcome.Failed("incomplete segments $complete/${items.size}")
@@ -174,6 +182,9 @@ class HlsDownloader(
 
         val videoItems = items.filter { it.stream == Stream.VIDEO }
         val audioItems = items.filter { it.stream == Stream.AUDIO }
+        val segmentBytes = items.sumOf { it.file.length() }
+        // Peak after this point is assembled + remux output (~2x), not 4x: segments are deleted as they are appended.
+        freeSpace.check(segmentBytes * 2, workDir.path)
         val assembledVideo = File(workDir, "assembled-video")
         val videoKind = assemble(videoItems, assembledVideo, media.map != null)
         val assembledAudio = if (audioItems.isEmpty()) {
@@ -190,18 +201,23 @@ class HlsDownloader(
                 RemuxResult(assembledVideo, HlsHeaders.MIME_MP4, null)
             else -> remuxer.remux(assembledVideo, assembledAudio, muxDest)
         }
+        if (result.output != assembledVideo) assembledVideo.delete()
+        assembledAudio?.delete()
 
         val ext = if (result.mime == HlsHeaders.MIME_MP4) ".mp4" else ".ts"
         val name = allocateName(HlsNames.withExt(record.filename, record.url, ext))
+        // video/mp2t makes MediaStore rewrite the name to .m2ts (E2); octet-stream keeps .ts.
+        val sinkMime = if (result.mime == HlsHeaders.MIME_TS) "application/octet-stream" else result.mime
         var sink: FileSink? = null
         try {
-            sink = sinkFactory.open(name, record.outputPath, result.mime)
+            sink = sinkFactory.open(name, record.outputPath, sinkMime)
             copyToSink(result.output, sink)
             val length = result.output.length()
+            val storedName = sink.outputName.ifBlank { name }
             store.replaceParts(record.id, parts.map { it.toRecord(record.id) })
             store.update(
                 record.copy(
-                    filename = name,
+                    filename = storedName,
                     outputPath = sink.outputPath,
                     mimeType = result.mime,
                     size = length,
@@ -295,6 +311,7 @@ class HlsDownloader(
                     else -> 0
                 }
                 copyFile(item.file, out, skip)
+                item.file.delete()
             }
         }
         return kind

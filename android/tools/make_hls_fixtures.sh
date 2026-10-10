@@ -85,6 +85,17 @@ first=$(ls "$OUT/junk"/seg*.ts | sort | head -n1)
 } > "$first.tmp"
 mv "$first.tmp" "$first"
 
+# 720p MPEG-TS with large keyframes for the instrumented MediaMuxer remux test (E1).
+AT="$ROOT/app/src/androidTest/assets/hls"
+mkdir -p "$AT"
+ffmpeg -y -hide_banner -loglevel error \
+  -f lavfi -i "testsrc2=duration=1:size=1280x720:rate=30" \
+  -f lavfi -i "sine=frequency=440:duration=1" \
+  -c:v libx264 -pix_fmt yuv420p -preset ultrafast -b:v 6M -g 15 \
+  -c:a aac -b:a 64k -f mpegts \
+  "$AT/big.ts"
+
 echo "fixtures in $OUT"
 find "$OUT" -type f | sort
 wc -c $(find "$OUT" -type f | sort)
+echo "androidTest $AT/big.ts $(wc -c < "$AT/big.ts") bytes"

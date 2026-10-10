@@ -4,6 +4,8 @@ import java.io.Closeable
 
 interface FileSink : Closeable {
     val outputPath: String
+    /** Name on disk after the provider (MediaStore may rewrite the extension). */
+    val outputName: String get() = ""
     fun writeAt(position: Long, data: ByteArray, offset: Int, length: Int)
     fun setLength(length: Long)
     /** Current size of the backing file; used to detect a missing/truncated partial file on resume. */
