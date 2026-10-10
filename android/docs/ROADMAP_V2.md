@@ -10,6 +10,14 @@ Owner's notes (from the Keep note):
 4. More aggressive ad blocking (go to animepahe.pw)
 5. Open link in new tab
 
+## 0. Owner decisions (answers to section 6, recorded)
+1. **Look:** closer to 1DM: dense layout, a coloured top bar, compact rows, tabs with counts. (Layout and behaviour follow 1DM; no copying of its name, icons or artwork.)
+2. **Search suggestions:** yes, added to M8 (see C). Privacy note below.
+3. **Ad blocking:** yes to automatic weekly list updates. The either/or about one switch vs two levels was not answered; **assumption: one "Block ads" switch (as in 1DM) with the strict ("aggressive") rules ON by default and an "Aggressive rules" toggle in Settings to relax them.** Change it if you prefer otherwise.
+4. **Ad-block engine:** `adblock-rust` approved (see D for the spike and fallback).
+5. **Incognito:** not needed (removed from A).
+6. **Torrents and magnets:** not needed (E keeps a plain "not supported" message).
+
 ## 1. What the 1DM+ screenshots show (reference, not to be copied pixel for pixel)
 
 | Screen | What 1DM+ does | What we learn |
@@ -33,11 +41,11 @@ Owner's notes (from the Keep note):
 Goal: a calm, modern one-row browser that matches the rest of the app.
 - **Top bar:** one row: `[tab-count badge] [lock + address pill (full width)] [overflow ⋮]`. Progress as a thin line under the pill. The address pill shows the host when not focused and the full URL when focused.
 - **Bottom bar:** back, forward, home, new tab, tabs. It hides on scroll down and returns on scroll up (more room for the page).
-- **Menu (⋮):** New tab, Incognito tab (separate cookie jar is not possible in one WebView profile: see risks), Desktop site, Bookmark, Bookmarks, History, **Block ads** (toggle), **Disable ad-block for this site**, **Page resources**, Clone tab, Share, Settings.
+- **Menu (⋮):** New tab, Desktop site, Bookmark, Bookmarks, History, **Block ads** (toggle), **Disable ad-block for this site**, **Page resources**, Clone tab, Share, Settings.
 - **Tabs screen:** a list or a grid with title, favicon, close; "Close all"; "Close others"; search. Must stay usable with 200+ tabs (lazy list, WebViews destroyed when not visible and restored from Room).
 - **Detected media button:** keep the floating chip, restyle it as a filled pill with a count, and pulse once when something new is found.
 - **Empty tab page:** search box, bookmarks as tiles, recent history, "Paste link from clipboard".
-- **Theme:** use the settings theme (system/light/dark) and the app's colour scheme; no purple-on-orange copying.
+- **Theme:** coloured top bar like 1DM (a deep purple/indigo primary), light and dark variants, still following the Settings theme choice.
 - Acceptance: screenshots of every state (light and dark), one-tap reach of the media list, no keyboard overlap, 200 tabs without jank, rotation keeps tabs.
 
 ### B. Open link in new tab (owner note 5): part of M8
@@ -48,8 +56,8 @@ Goal: a calm, modern one-row browser that matches the rest of the app.
 
 ### C. Search engine (owner note 1): small, part of M8
 - Add a **search engine setting**: Google (default, as requested), DuckDuckGo, Bing, Brave, with custom URL template (`%s`).
-- Omnibox suggestions are a later step (needs a network call per keystroke: privacy decision). First version: none.
-- Acceptance: typing a non-URL goes to the chosen engine; the setting survives restart.
+- **Suggestions (approved):** while typing, show up to 6 suggestions under the address pill, plus matching bookmarks and history first. Rules: only after 2 or more characters, 250 ms debounce, cancel the previous request, **never** send text that looks like a URL or contains a scheme, and a Settings toggle "Search suggestions" (default on). Each engine has its own suggestion endpoint (Google, DuckDuckGo, Bing, Brave); sent over HTTPS, no cookies, no identifying headers beyond a generic User-Agent, nothing logged.
+- Acceptance: typing a non-URL goes to the chosen engine; the setting survives restart; suggestions appear, are cancelled when typing continues, and are not requested for URLs; turning the toggle off stops all suggestion requests (checked with a test server).
 
 ### D. Aggressive ad blocking (owner note 4): milestone M9
 This is the biggest item and the one with real technical choices.
@@ -59,9 +67,12 @@ This is the biggest item and the one with real technical choices.
 - **Navigation and popup hardening:** block cross-origin top-level redirects not caused by a gesture, `window.open` chains, `location` changes from ad frames, and `intent://`/app-store schemes; ask before leaving the typed site.
 - **Controls:** global toggle in the menu and Settings, a **per-site exception** ("Disable ad-block for this site"), a counter ("14 blocked") on the page, and a one-tap "this page looks wrong: disable here".
 - **Lists:** updated weekly in the background (WorkManager), downloaded over HTTPS from the list maintainers, with a built-in copy so it works offline. Licence note: EasyList is dual licensed (GPLv3 / CC BY-SA 3.0); attribute it in the app and keep the lists as data files.
-- **Library or own code?** Options: (1) write a small matcher (about 800 lines, no dependency, enough for network + simple cosmetic rules; recommended first); (2) Brave's `adblock-rust` through JNI (best, handles full syntax; adds native code and a dependency, owner approval needed). Start with (1), design the interface so (2) can replace it.
+- **Engine (approved): Brave `adblock-rust`** (licence MPL-2.0: fine to use; keep its files and any changes to them open; attribution in the app). It handles the full filter syntax (network and cosmetic rules, `$third-party`, `$popup`, scriptlets, exceptions) and is actively maintained (last push this month). Needs native code through JNI.
+  - **Spike first (about one day), before any app work:** (1) look for a maintained prebuilt Android/Kotlin binding we can depend on (cheapest); (2) otherwise build it ourselves with `cargo-ndk` for `arm64-v8a`, `armeabi-v7a` and `x86_64`; this machine has **no Rust toolchain yet** (rustup, the Android targets and `cargo-ndk`, roughly 1.5 GB; NDK 28.2 is installed and disk has about 9 GB free), so the owner must approve installing them; (3) measure APK size increase (expect a few MB per CPU type), list load time (EasyList plus EasyPrivacy) and per-request match time on the emulator; (4) test that a request answered by the engine can be blocked without breaking detection.
+  - **Decision gate:** if the spike fails or is too heavy (size above about 8 MB per CPU type, load above about 1.5 s, or the toolchain cannot be installed), **fall back to our own small matcher** behind the same interface (`AdBlocker.shouldBlock(url, sourceUrl, type)`, `cosmeticCss(url)`), so the rest of M9 does not change.
+  - Build integration: ship `.so` files for the ABIs we support; no downloads at runtime other than the filter lists; R8 keep rules for the JNI class; the release check from M6 must include a run with the library loaded.
 - **Test on animepahe.pw:** measure before/after on the real site: count of blocked requests, popups prevented, overlays removed, page still plays video and **detection still works** (do not block the player, `.m3u8`, `.mp4`, key and segment requests). Test on the emulator if the site loads there; otherwise on the owner's phone.
-- Risks: breakage of legitimate sites (hence the per-site switch and conservative defaults for non-streaming sites), the "aggressive" mode could be a separate Settings level (Standard / Aggressive).
+- Risks: breakage of legitimate sites (hence the per-site switch). The strict ("aggressive") rules are on by default and can be relaxed in Settings (owner decision 3). Native code adds build complexity and APK size, which is why the spike comes first.
 - Acceptance: unit tests for the matcher against a list of sample rules and URLs; an instrumented test that a page with ad requests loads with them blocked and its video still detected; a manual check on animepahe.pw recorded with screenshots.
 
 ### E. Downloader for more than video (owner note 3): milestone M10
@@ -90,8 +101,8 @@ This is the biggest item and the one with real technical choices.
 
 | Order | Milestone | Content | Size | Needs from the owner |
 |---|---|---|---|---|
-| 1 | M8 | Browser look, tabs screen, long-press menu, open in new tab, search engine setting (A, B, C) | medium | choose the look (see questions) |
-| 2 | M9 | Ad blocking engine, lists, per-site switch, hardening, animepahe test (D) | large | approve own matcher vs adblock-rust; test on animepahe.pw |
+| 1 | M8 | Browser look (closer to 1DM), tabs screen, long-press menu, open in new tab, search engine setting with suggestions (A, B, C) | medium | none |
+| 2 | M9 | Spike for adblock-rust (with fallback matcher), lists, per-site switch, hardening, animepahe test (D) | large | approve installing the Rust toolchain for the spike; test on animepahe.pw |
 | 3 | M10 | Generic file detection, page resources, batch add, Refresh link (E, F) | large | none |
 | 4 | M11 | Downloads screen polish (G) | medium | none |
 | later | M7 | YouTube via NewPipeExtractor (paused) | medium | GPL decision, see the earlier note |
@@ -105,10 +116,7 @@ Dependencies: M8 first (the menu and the tab count hold the later toggles). M9 a
 - The auditor reviews each milestone in the audit worktree on its own branch as before.
 
 ## 6. Questions for the owner
-1. **Look:** do you want it close to 1DM (dense, purple top bar), or a cleaner Material 3 look following system colours? A screenshot of a browser you like (Chrome, Brave, Kiwi, Firefox) would settle it.
-2. **Search:** Google as the default is fine; do you also want search suggestions while typing (sends keystrokes to the engine)?
-3. **Ad blocking level:** one "Block ads" switch (as in 1DM) or a Standard / Aggressive choice? Are you comfortable with an automatic weekly list update from the internet?
-4. **Library:** own small matcher first (recommended), or the heavier `adblock-rust`?
-5. **Incognito:** do you want it? A real private mode with its own cookie jar needs the newer WebView profile API (Android 12+ devices with a recent WebView); on older ones it would only skip history.
-6. **More than video:** is a list of page resources enough, or do you also want Spotter to appear in the system share sheet for any file or link (already done for links), and to take over browser downloads from other browsers?
-7. **Torrents and magnets:** not needed for now?
+Answered: see section 0. Still open:
+1. **Rust toolchain:** may the spike install `rustup`, the three Android targets and `cargo-ndk` on this machine (about 1.5 GB, disk currently about 9 GB free)? Without it we go straight to the fallback matcher.
+2. **Aggressive rules default:** the plan assumes strict rules ON by default with a way to relax them. Confirm or change.
+3. **Real device:** the animepahe.pw tests are best on your phone. When we get there, do you want to run them yourself, or may the auditor use an attached device (only with your say-so each time)?
