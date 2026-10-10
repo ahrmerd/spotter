@@ -93,4 +93,4 @@ Fix F1, F2, F3; address F4 to F8 or justify; commit as `M1: ...` (and a second `
 
 Evidence: `./gradlew testDebugUnitTest` -> 30 tests, 0 failures (Filename 6, M1Acceptance 7, M1Fixes 10, PartPlanner 4, HeaderReplay 1, Http2Protocol 2). `assembleDebug` OK.
 Caveats: Room itself still only runs on a device (`RoomLikeStore` models its cancellation behaviour); `MediaStoreSink` unverified (M2).
-**The fixes were written by the auditor, not the builder, so they need an independent look: ask the builder to read the diff of commit "M1 audit fixes" and confirm, or have it re-audit in M2's first step.**
+**The fixes were written by the auditor, not the builder, so they need an independent look: have the builder read the code paths named above (they are in commit 86e8c98 together with M1) and confirm at the start of M2.**
