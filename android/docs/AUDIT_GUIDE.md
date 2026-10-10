@@ -2,6 +2,7 @@
 
 For each milestone, in this order:
 
+0. **Scope the diff.** `git log --oneline` and `git diff <previous milestone commit>..HEAD --stat` (baseline: `4cac2b9`). Files changed outside the milestone, or under `server/` or `extension/`, are findings.
 1. **Reproduce.** Run the build and the exact commands from the builder's report. Different result than reported = finding.
 2. **Checklist.** Go through the milestone's acceptance list: PASS / FAIL / NOT-VERIFIED, each with evidence. Anything the builder
    marked NOT RUN stays NOT-VERIFIED until someone runs it.

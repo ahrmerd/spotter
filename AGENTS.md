@@ -27,7 +27,8 @@ Spotter: a download manager + video detector. Two parts exist:
 - Keep the baseline build green: `cd android && ANDROID_HOME=~/Android/Sdk ./gradlew assembleDebug`.
 - The machine is low on disk (~8 GB). One emulator only; clean build outputs when you finish a milestone.
 - Shell is fish. Put scripts in `android/tools/` with `#!/usr/bin/env bash`.
-- Git is not initialised in this repo yet. Don't run `git init` or commit unless the owner asks.
+- Git: the baseline commit is `4cac2b9` on `master`. Make one commit per milestone when you hand it in (message `Mx: <summary>`),
+  never rewrite or amend history, never force-push, never commit ignored/build files. The auditor diffs with `git diff 4cac2b9..HEAD`.
 
 ## Where things go
 - Code: `android/app/src/main/java/dev/ahmed/spotter/...` (layout in plan section 2)
