@@ -2,6 +2,7 @@ package dev.ahmed.spotter.engine.hls
 
 import dev.ahmed.spotter.engine.http.HttpStatusException
 import dev.ahmed.spotter.engine.http.NeedsRefreshException
+import dev.ahmed.spotter.engine.net.CookieSource
 import dev.ahmed.spotter.engine.net.HeaderUtils
 import dev.ahmed.spotter.engine.net.TokenBucket
 import kotlinx.coroutines.currentCoroutineContext
@@ -20,6 +21,7 @@ class HlsHttp(
     private val client: OkHttpClient,
     private val tokenBucket: TokenBucket = TokenBucket(),
     private val connectionLimiter: AtomicReference<Semaphore> = AtomicReference(Semaphore(16)),
+    private val cookies: CookieSource = CookieSource.NONE,
 ) {
     suspend fun fetchText(url: String, captured: Map<String, String>, maxBytes: Int = MAX_PLAYLIST): String {
         val bytes = fetchBounded(url, captured, maxBytes, range = null)
@@ -130,7 +132,10 @@ class HlsHttp(
     }
 
     private fun request(url: String, captured: Map<String, String>, extra: Map<String, String>): Request {
-        val headers = HeaderUtils.merge(captured, extra)
+        val headers = HeaderUtils.merge(
+            with(CookieSource) { captured.withCookie(url, cookies) },
+            extra,
+        )
         return Request.Builder().url(url).get().apply {
             for ((k, v) in headers) header(k, v)
         }.build()
@@ -145,7 +150,7 @@ class HlsHttp(
 
     private fun throwIfBad(code: Int) {
         when (code) {
-            403, 404, 410 -> throw NeedsRefreshException(code, "HTTP $code")
+            401, 403, 404, 410 -> throw NeedsRefreshException(code, "HTTP $code")
             200, 206 -> Unit
             else -> throw HttpStatusException(code, "HTTP $code")
         }

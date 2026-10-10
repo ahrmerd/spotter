@@ -114,4 +114,21 @@ class RoomDownloadStoreTest {
         assertNull(store.get(id))
         assertTrue(store.getParts(id).isEmpty())
     }
+
+    @Test
+    fun secretHeadersAreNotWrittenToTheDatabase() = runBlocking {
+        val id = store.insert(
+            DownloadRecord(
+                url = "https://example.com/s.bin",
+                headers = mapOf("Cookie" to "sid=SECRET", "Authorization" to "Bearer SECRET", "Referer" to "https://example.com/"),
+                state = DownloadState.QUEUED,
+            ),
+        )
+        val rec = store.get(id)!!
+        assertEquals(setOf("Referer"), rec.headers.keys)
+        val raw = db.openHelper.writableDatabase.query("SELECT headersJson FROM downloads WHERE id=$id").use { c ->
+            c.moveToFirst(); c.getString(0)
+        }
+        assertTrue(raw, !raw.contains("SECRET"))
+    }
 }

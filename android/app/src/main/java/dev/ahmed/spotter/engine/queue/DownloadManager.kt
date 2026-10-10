@@ -12,6 +12,7 @@ import dev.ahmed.spotter.engine.http.HttpDownloader
 import dev.ahmed.spotter.engine.model.DownloadRecord
 import dev.ahmed.spotter.engine.model.DownloadState
 import dev.ahmed.spotter.engine.model.EngineSettings
+import dev.ahmed.spotter.engine.net.CookieSource
 import dev.ahmed.spotter.engine.net.HttpClients
 import dev.ahmed.spotter.engine.net.NetworkPolicy
 import dev.ahmed.spotter.engine.net.TokenBucket
@@ -48,6 +49,7 @@ class DownloadManager(
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     sinkFactory: FileSinkFactory? = null,
     hlsRemuxer: HlsRemuxer = KeepTsRemuxer,
+    cookies: CookieSource = CookieSource.NONE,
 ) {
     private val connectionLimiter = AtomicReference(Semaphore(EngineSettings.DEFAULT_MAX_CONNECTIONS))
     private val downloader = HttpDownloader(
@@ -57,6 +59,7 @@ class DownloadManager(
         tokenBucket = tokenBucket,
         connectionLimiter = connectionLimiter,
         ioDispatcher = ioDispatcher,
+        cookies = cookies,
     )
     private val hlsDownloader = HlsDownloader(
         client = client,
@@ -66,6 +69,7 @@ class DownloadManager(
         connectionLimiter = connectionLimiter,
         ioDispatcher = ioDispatcher,
         remuxer = hlsRemuxer,
+        cookies = cookies,
     )
     private val sinks = sinkFactory ?: FileSinkFactory { filename, resumePath, _ ->
         PrivateFileSink.forName(outputDir, filename, resumePath)

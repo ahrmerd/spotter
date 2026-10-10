@@ -45,6 +45,11 @@ class SpotterApp : Application() {
 
     val httpClient by lazy { HttpClients.create() }
 
+    /** Cookies come from the WebView at request time and are never stored with a download (see CookieSource). */
+    val cookieSource = dev.ahmed.spotter.engine.net.CookieSource { url ->
+        runCatching { android.webkit.CookieManager.getInstance().getCookie(url) }.getOrNull()
+    }
+
     val networkPolicy: NetworkPolicy by lazy { AndroidNetworkPolicy(this) }
 
     val privateDir: File
@@ -66,6 +71,7 @@ class SpotterApp : Application() {
             },
             sinkFactory = AndroidSinkFactory(contentResolver, privateDir),
             hlsRemuxer = MediaMuxerRemuxer(),
+            cookies = cookieSource,
         )
     }
 

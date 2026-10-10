@@ -16,7 +16,10 @@ data class ProbeResult(
     val lastModified: String?,
 )
 
-class RangeProbe(private val client: OkHttpClient) {
+class RangeProbe(
+    private val client: OkHttpClient,
+    private val cookies: CookieSource = CookieSource.NONE,
+) {
     fun probe(
         url: String,
         capturedHeaders: Map<String, String>,
@@ -39,13 +42,16 @@ class RangeProbe(private val client: OkHttpClient) {
         capturedHeaders: Map<String, String>,
         extra: Map<String, String>,
     ): ProbeResult {
-        val headers = HeaderUtils.merge(capturedHeaders, extra + ("Range" to "bytes=0-0"))
+        val headers = HeaderUtils.merge(
+            with(CookieSource) { capturedHeaders.withCookie(url, cookies) },
+            extra + ("Range" to "bytes=0-0"),
+        )
         val req = Request.Builder().url(url).get().apply {
             for ((k, v) in headers) header(k, v)
         }.build()
         client.newCall(req).execute().use { resp ->
             when (resp.code) {
-                403, 404, 410 -> throw NeedsRefreshException(resp.code, "Probe HTTP ${resp.code}")
+                401, 403, 404, 410 -> throw NeedsRefreshException(resp.code, "Probe HTTP ${resp.code}")
                 206, 200 -> Unit
                 else -> throw HttpStatusException(resp.code, "Probe HTTP ${resp.code}")
             }

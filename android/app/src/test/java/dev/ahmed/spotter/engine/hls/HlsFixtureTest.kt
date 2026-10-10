@@ -2,6 +2,7 @@ package dev.ahmed.spotter.engine.hls
 
 import dev.ahmed.spotter.engine.RangeTestServer
 import dev.ahmed.spotter.engine.model.DownloadState
+import dev.ahmed.spotter.engine.net.CookieSource
 import dev.ahmed.spotter.engine.net.HttpClients
 import dev.ahmed.spotter.engine.queue.DownloadManager
 import dev.ahmed.spotter.engine.store.InMemoryDownloadStore
@@ -34,7 +35,6 @@ class HlsFixtureTest {
     private val captured = mapOf(
         "Referer" to "https://iframe.example/player",
         "Origin" to "https://iframe.example",
-        "Cookie" to "session=secret",
         "User-Agent" to "SpotterTest/1.0",
     )
 
@@ -51,6 +51,7 @@ class HlsFixtureTest {
             scope = scope,
             client = HttpClients.create(readTimeoutSeconds = 20, writeTimeoutSeconds = 20),
             hlsRemuxer = FfmpegCliRemuxer(),
+            cookies = CookieSource { "session=secret" },
         )
         server.requiredHeaders = mapOf(
             "referer" to "https://iframe.example/player",

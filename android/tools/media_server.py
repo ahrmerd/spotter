@@ -111,6 +111,8 @@ class Handler(threading.Thread):
             extra = [
                 f"Content-Range: bytes {start}-{end}/{size}",
                 "Accept-Ranges: bytes",
+                "Access-Control-Allow-Origin: *",
+                "Access-Control-Expose-Headers: Content-Range, Content-Length, Accept-Ranges",
                 f"Content-Type: {ctype}",
                 f"Content-Length: {len(body)}",
             ]
@@ -118,6 +120,8 @@ class Handler(threading.Thread):
             return
         extra = [
             "Accept-Ranges: bytes",
+            "Access-Control-Allow-Origin: *",
+            "Access-Control-Expose-Headers: Content-Range, Content-Length, Accept-Ranges",
             f"Content-Type: {ctype}",
             f"Content-Length: {size}",
         ]

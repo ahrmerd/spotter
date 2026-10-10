@@ -26,6 +26,10 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
+    sourceSets {
+        // Room's MigrationTestHelper reads the exported schema JSONs (1.json, 2.json) from the test assets.
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
     testOptions {
         unitTests.isReturnDefaultValues = true
         unitTests.all {

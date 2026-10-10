@@ -60,6 +60,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -86,8 +88,14 @@ fun BrowserScreen(
     var showHistory by remember { mutableStateOf(false) }
     var names by remember { mutableStateOf(mapOf<String, String>()) }
 
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    // The address bar must not keep focus (and the keyboard) after a page starts loading, or the keyboard
+    // covers the "N media" button (audit B3).
     LaunchedEffect(ui.address) {
         if (addressField != ui.address) addressField = ui.address
+        focusManager.clearFocus()
+        keyboard?.hide()
     }
     LaunchedEffect(ui.message) {
         val msg = ui.message ?: return@LaunchedEffect
@@ -131,9 +139,23 @@ fun BrowserScreen(
                 onClose = { vm.closeTab(it, holder) },
                 onNew = { vm.newTab() },
             )
+            OutlinedTextField(
+                value = addressField,
+                onValueChange = { addressField = it },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                singleLine = true,
+                placeholder = { Text("Search or URL") },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                keyboardActions = KeyboardActions(onGo = {
+                    vm.submitAddress(addressField, holder)
+                    focusManager.clearFocus()
+                    keyboard?.hide()
+                }),
+            )
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 IconButton({ vm.back(holder) }, enabled = ui.canBack) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
@@ -142,15 +164,6 @@ fun BrowserScreen(
                     Icon(Icons.AutoMirrored.Filled.ArrowForward, "Forward")
                 }
                 IconButton({ vm.reload(holder) }) { Icon(Icons.Default.Refresh, "Refresh") }
-                OutlinedTextField(
-                    value = addressField,
-                    onValueChange = { addressField = it },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    placeholder = { Text("Search or URL") },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                    keyboardActions = KeyboardActions(onGo = { vm.submitAddress(addressField, holder) }),
-                )
                 IconButton({ vm.toggleDesktop(holder) }) {
                     Icon(
                         Icons.Default.Computer,
@@ -363,7 +376,7 @@ private fun DetectedMediaSheet(
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Text("Detected media", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(16.dp))
         LazyColumn(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            items(items, key = { it.url }) { item ->
+            items(items.sortedBy { it.url.startsWith("blob:") }, key = { it.url }) { item ->
                 DetectedRow(
                     item = item,
                     name = names[item.url] ?: item.suggestedName,
@@ -385,7 +398,17 @@ private fun DetectedRow(
     onDownload: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        Text(item.type, style = MaterialTheme.typography.labelMedium)
+        val isBlob = item.url.startsWith("blob:")
+        val host = runCatching { java.net.URI(item.url.removePrefix("blob:")).host }.getOrNull().orEmpty()
+        Text(
+            when {
+                isBlob -> "In-page stream (cannot be downloaded directly)"
+                item.kind == MediaKind.PLAYLIST -> "Stream playlist (HLS/DASH)"
+                item.type.isNotBlank() && item.type != "media" && item.type != "stream" -> item.type
+                else -> "Media file"
+            } + if (host.isNotEmpty()) " · $host" else "",
+            style = MaterialTheme.typography.labelMedium,
+        )
         Text(
             item.url,
             maxLines = 1,
@@ -408,8 +431,8 @@ private fun DetectedRow(
             label = { Text("File name") },
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onDownload, enabled = item.kind != MediaKind.PAGE_RESOLVER) {
-                Text("Download")
+            TextButton(onDownload, enabled = item.kind != MediaKind.PAGE_RESOLVER && !isBlob) {
+                Text(if (isBlob) "Use the other entry" else "Download")
             }
         }
     }

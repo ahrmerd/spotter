@@ -9,7 +9,7 @@ import dev.ahmed.spotter.SpotterApp
 import dev.ahmed.spotter.browser.AddressBar
 import dev.ahmed.spotter.browser.BrowserStore
 import dev.ahmed.spotter.browser.DetectedItem
-import dev.ahmed.spotter.browser.HeaderCapture
+import dev.ahmed.spotter.engine.store.HeaderJson
 import dev.ahmed.spotter.browser.MediaKind
 import dev.ahmed.spotter.browser.MediaNames
 import dev.ahmed.spotter.browser.PageTitles
@@ -73,7 +73,7 @@ data class BrowserUi(
 class BrowserViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as SpotterApp
     private val store: BrowserStore get() = app.browserStore
-    private val rangeProbe = RangeProbe(app.httpClient)
+    private val rangeProbe = RangeProbe(app.httpClient, app.cookieSource)
     private val nextTempId = AtomicLong(-1)
 
     private val activeTabId = MutableStateFlow(0L)
@@ -85,7 +85,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private val detectedTick = MutableStateFlow(0L)
     private val message = MutableStateFlow<String?>(null)
     val qualityPrompt = MutableStateFlow<QualityPrompt?>(null)
-    private val hlsHttp = HlsHttp(app.httpClient)
+    private val hlsHttp = HlsHttp(app.httpClient, cookies = app.cookieSource)
     private val typedUrl = ConcurrentHashMap<Long, String>()
     private val pageMeta = ConcurrentHashMap<Long, Pair<String, String>>()
 
@@ -341,12 +341,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
         val filename = MediaNames.finalize(name, item)
         viewModelScope.launch {
-            val cookie = try {
-                CookieManager.getInstance().getCookie(item.url)
-            } catch (_: Exception) {
-                null
-            }
-            val headers = HeaderCapture.mergeCookie(item.headers, cookie)
+            // Cookie/Authorization are not stored with the download; the engine reads cookies from the
+            // WebView's CookieManager for every request (see CookieSource).
+            val headers = HeaderJson.persistable(item.headers)
             if (item.kind == MediaKind.PLAYLIST) {
                 enqueuePlaylist(item, filename, headers)
             } else {
@@ -368,7 +365,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         val option = prompt.options.getOrNull(prompt.selected) ?: return
         qualityPrompt.value = null
         viewModelScope.launch {
-            val headers = prompt.headers + buildMap {
+            val headers = HeaderJson.persistable(prompt.headers) + buildMap {
                 put(HlsHeaders.VARIANT, option.variantUri)
                 option.audioUri?.let { put(HlsHeaders.AUDIO, it) }
             }
@@ -418,7 +415,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                         message.value = "Live HLS is not supported (no #EXT-X-ENDLIST)"
                         return
                     }
-                    app.manager.enqueue(item.url, headers, filename)
+                    app.manager.enqueue(item.url, HeaderJson.persistable(headers), filename)
                     message.value = "Queued $filename"
                 }
             }
@@ -455,14 +452,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     ) {
         if (!url.startsWith("http")) return
         viewModelScope.launch {
-            val cookie = try {
-                CookieManager.getInstance().getCookie(url)
-            } catch (_: Exception) {
-                null
-            }
-            val headers = HeaderCapture.mergeCookie(
+            val headers = HeaderJson.persistable(
                 buildMap { if (userAgent.isNotBlank()) put("User-Agent", userAgent) },
-                cookie,
             )
             val suggested = PageTitles.suggestedFilename(ui.value.title, url, mime)
             val fromCd = Filenames.fromContentDisposition(contentDisposition)

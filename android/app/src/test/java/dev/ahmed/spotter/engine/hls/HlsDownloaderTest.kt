@@ -3,6 +3,7 @@ package dev.ahmed.spotter.engine.hls
 import dev.ahmed.spotter.engine.RangeTestServer
 import dev.ahmed.spotter.engine.model.DownloadState
 import dev.ahmed.spotter.engine.model.EngineSettings
+import dev.ahmed.spotter.engine.net.CookieSource
 import dev.ahmed.spotter.engine.net.HeaderUtils
 import dev.ahmed.spotter.engine.net.HttpClients
 import dev.ahmed.spotter.engine.queue.DownloadManager
@@ -41,7 +42,6 @@ class HlsDownloaderTest {
     private val captured = mapOf(
         "Referer" to "https://iframe.example/player",
         "Origin" to "https://iframe.example",
-        "Cookie" to "session=secret",
         "User-Agent" to "SpotterTest/1.0",
     )
 
@@ -75,6 +75,7 @@ class HlsDownloaderTest {
             scope = scope,
             client = HttpClients.create(readTimeoutSeconds = 15, writeTimeoutSeconds = 15),
             hlsRemuxer = remuxer,
+            cookies = CookieSource { "session=secret" },
         )
     }
 
@@ -105,6 +106,7 @@ class HlsDownloaderTest {
         }
         val merged = HeaderUtils.merge(headers)
         assertTrue(merged.keys.none { it.startsWith("X-Spotter") || it.startsWith("x-spotter") })
+        assertEquals(null, rec.headers.keys.firstOrNull { it.equals("Cookie", true) })
         println("M4 plain-ts sha=$actual requests=${server.requestCount} name=${rec.filename} size=${rec.size}")
     }
 

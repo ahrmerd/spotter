@@ -5,6 +5,7 @@ import dev.ahmed.spotter.engine.http.DownloadOutcome
 import dev.ahmed.spotter.engine.http.MutablePart
 import dev.ahmed.spotter.engine.http.NeedsRefreshException
 import dev.ahmed.spotter.engine.model.DownloadRecord
+import dev.ahmed.spotter.engine.net.CookieSource
 import dev.ahmed.spotter.engine.net.TokenBucket
 import dev.ahmed.spotter.engine.sink.FileSink
 import dev.ahmed.spotter.engine.sink.FileSinkFactory
@@ -36,8 +37,9 @@ class HlsDownloader(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val remuxer: HlsRemuxer = KeepTsRemuxer,
     private val parallel: Int = DEFAULT_PARALLEL,
+    cookies: CookieSource = CookieSource.NONE,
 ) {
-    private val http = HlsHttp(client, tokenBucket, connectionLimiter)
+    private val http = HlsHttp(client, tokenBucket, connectionLimiter, cookies)
 
     suspend fun download(
         downloadId: Long,
