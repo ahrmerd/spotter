@@ -1,0 +1,391 @@
+package dev.ahmed.spotter.ui
+
+import android.app.Application
+import android.webkit.CookieManager
+import android.webkit.WebView
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import dev.ahmed.spotter.SpotterApp
+import dev.ahmed.spotter.browser.AddressBar
+import dev.ahmed.spotter.browser.BrowserStore
+import dev.ahmed.spotter.browser.DetectedItem
+import dev.ahmed.spotter.browser.HeaderCapture
+import dev.ahmed.spotter.browser.MediaKind
+import dev.ahmed.spotter.browser.MediaNames
+import dev.ahmed.spotter.browser.PageTitles
+import dev.ahmed.spotter.browser.PopupRules
+import dev.ahmed.spotter.browser.SnifferCoordinator
+import dev.ahmed.spotter.browser.WebViewCallbacks
+import dev.ahmed.spotter.browser.WebViewHolder
+import dev.ahmed.spotter.engine.Filenames
+import dev.ahmed.spotter.engine.net.RangeProbe
+import dev.ahmed.spotter.engine.store.BookmarkEntity
+import dev.ahmed.spotter.engine.store.HistoryEntity
+import dev.ahmed.spotter.engine.store.TabEntity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
+
+data class BrowserUi(
+    val tabs: List<TabEntity> = emptyList(),
+    val activeTabId: Long = 0L,
+    val address: String = "",
+    val title: String = "",
+    val desktop: Boolean = false,
+    val loading: Boolean = false,
+    val progress: Int = 0,
+    val canBack: Boolean = false,
+    val canForward: Boolean = false,
+    val bookmarked: Boolean = false,
+    val detected: List<DetectedItem> = emptyList(),
+    val bookmarks: List<BookmarkEntity> = emptyList(),
+    val history: List<HistoryEntity> = emptyList(),
+    val message: String? = null,
+)
+
+class BrowserViewModel(application: Application) : AndroidViewModel(application) {
+    private val app = application as SpotterApp
+    private val store: BrowserStore get() = app.browserStore
+    private val rangeProbe = RangeProbe(app.httpClient)
+    private val nextTempId = AtomicLong(-1)
+
+    private val activeTabId = MutableStateFlow(0L)
+    private val address = MutableStateFlow("")
+    private val loading = MutableStateFlow(false)
+    private val progress = MutableStateFlow(0)
+    private val canBack = MutableStateFlow(false)
+    private val canForward = MutableStateFlow(false)
+    private val detectedTick = MutableStateFlow(0L)
+    private val message = MutableStateFlow<String?>(null)
+    private val typedUrl = ConcurrentHashMap<Long, String>()
+    private val pageMeta = ConcurrentHashMap<Long, Pair<String, String>>()
+
+    private val sniffer = SnifferCoordinator(
+        scope = viewModelScope,
+        probe = { url, headers ->
+            try {
+                rangeProbe.probe(url, headers)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+        },
+        cookieOf = { url ->
+            try {
+                CookieManager.getInstance().getCookie(url)
+            } catch (_: Exception) {
+                null
+            }
+        },
+        persist = { tabId, items ->
+            if (tabId <= 0) return@SnifferCoordinator
+            viewModelScope.launch { store.saveSniffer(tabId, items) }
+        },
+        onChange = { detectedTick.value = detectedTick.value + 1 },
+    )
+
+    val ui: StateFlow<BrowserUi> = combine(
+        store.observeTabs(),
+        store.observeBookmarks(),
+        store.observeHistory(),
+        combine(activeTabId, address, loading, progress) { a, b, c, d -> Quad(a, b, c, d) },
+        combine(canBack, canForward, detectedTick, message) { a, b, c, d -> Quad(a, b, c, d) },
+    ) { tabs, bookmarks, history, nav, extra ->
+        val id = nav.a
+        val addr = nav.b
+        val tab = tabs.firstOrNull { it.id == id } ?: tabs.firstOrNull()
+        val tabId = tab?.id ?: 0L
+        val url = addr.ifBlank { tab?.url.orEmpty() }
+        BrowserUi(
+            tabs = tabs,
+            activeTabId = tabId,
+            address = url,
+            title = tab?.title.orEmpty(),
+            desktop = tab?.desktop == true,
+            loading = nav.c,
+            progress = nav.d,
+            canBack = extra.a,
+            canForward = extra.b,
+            bookmarked = bookmarks.any { it.url == url },
+            detected = sniffer.items(tabId),
+            bookmarks = bookmarks,
+            history = history,
+            message = extra.d,
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BrowserUi())
+
+    fun callbacks(holder: WebViewHolder): WebViewCallbacks {
+        lateinit var cb: WebViewCallbacks
+        cb = WebViewCallbacks(
+        typedUrl = { typedUrl[it] },
+        pageUrl = { pageMeta[it]?.first.orEmpty() },
+        pageTitle = { pageMeta[it]?.second.orEmpty() },
+        onPageStarted = { tabId, url ->
+            if (tabId == activeTabId.value) {
+                loading.value = true
+                progress.value = 0
+                address.value = displayUrl(url)
+            }
+            pageMeta[tabId] = url to (pageMeta[tabId]?.second.orEmpty())
+            sniffer.onNavigation(tabId)
+        },
+        onPageFinished = { tabId, url, title ->
+            if (tabId == activeTabId.value) {
+                loading.value = false
+                progress.value = 100
+                address.value = displayUrl(url)
+            }
+            val cleaned = PageTitles.clean(title).ifBlank { title }
+            pageMeta[tabId] = url to cleaned
+            viewModelScope.launch {
+                val tab = store.tabs().firstOrNull { it.id == tabId } ?: return@launch
+                store.updateTab(tab.copy(url = url, title = cleaned.ifBlank { tab.title }))
+                store.addHistory(url, cleaned)
+            }
+        },
+        onTitle = { tabId, title ->
+            val cleaned = PageTitles.clean(title).ifBlank { title }
+            val prev = pageMeta[tabId]
+            pageMeta[tabId] = (prev?.first.orEmpty()) to cleaned
+            viewModelScope.launch {
+                val tab = store.tabs().firstOrNull { it.id == tabId } ?: return@launch
+                if (tab.title != cleaned) store.updateTab(tab.copy(title = cleaned))
+            }
+        },
+        onUrl = { tabId, url ->
+            if (tabId == activeTabId.value) address.value = displayUrl(url)
+        },
+        onProgress = { tabId, p ->
+            if (tabId == activeTabId.value) {
+                progress.value = p
+                loading.value = p in 1..99
+            }
+        },
+        onNavState = { tabId, back, fwd ->
+            if (tabId == activeTabId.value) {
+                canBack.value = back
+                canForward.value = fwd
+            }
+        },
+        onIntercept = { tabId, url, headers ->
+            val meta = pageMeta[tabId]
+            sniffer.onIntercept(tabId, url, headers, meta?.first.orEmpty(), meta?.second.orEmpty())
+        },
+        onJsMedia = { tabId, url, play ->
+            val meta = pageMeta[tabId]
+            sniffer.onJs(tabId, url, meta?.first.orEmpty(), meta?.second.orEmpty(), play)
+        },
+        onDownload = { url, userAgent, contentDisposition, mime, _ ->
+            enqueueWebDownload(url, userAgent, contentDisposition, mime)
+        },
+        onNewWindow = { userGesture, attach ->
+            if (!PopupRules.allowNewWindow(userGesture)) return@WebViewCallbacks false
+            val host = holder.get(activeTabId.value) ?: return@WebViewCallbacks false
+            val tempId = nextTempId.getAndDecrement()
+            val child = holder.createWebView(host.context, tempId, cb)
+            attach(child)
+            viewModelScope.launch {
+                val tab = store.addTab(title = "New tab")
+                holder.rebind(tempId, tab.id)
+                selectTab(tab.id)
+            }
+            true
+        },
+        )
+        return cb
+    }
+
+    init {
+        viewModelScope.launch {
+            val existing = store.tabs()
+            val tabs = if (existing.isEmpty()) listOf(store.addTab()) else existing
+            val saved = store.getActiveTabId()?.takeIf { id -> tabs.any { it.id == id } }
+            val active = saved ?: tabs.first().id
+            activeTabId.value = active
+            address.value = tabs.first { it.id == active }.url
+            for (tab in tabs) {
+                val cached = store.loadSniffer(tab.id)
+                if (cached.isNotEmpty()) sniffer.restore(tab.id, cached)
+            }
+        }
+    }
+
+    fun submitAddress(raw: String, holder: WebViewHolder) {
+        val url = AddressBar.resolve(raw)
+        if (url.isBlank()) return
+        val tabId = activeTabId.value
+        typedUrl[tabId] = url
+        address.value = url
+        holder.get(tabId)?.loadUrl(url)
+        viewModelScope.launch {
+            val tab = store.tabs().firstOrNull { it.id == tabId } ?: return@launch
+            store.updateTab(tab.copy(url = url))
+            store.setActiveTabId(tabId)
+        }
+    }
+
+    fun selectTab(id: Long, holder: WebViewHolder? = null) {
+        activeTabId.value = id
+        detectedTick.value += 1
+        val wv = holder?.get(id)
+        canBack.value = wv?.canGoBack() == true
+        canForward.value = wv?.canGoForward() == true
+        address.value = wv?.url?.let { displayUrl(it) }
+            ?: ui.value.tabs.firstOrNull { it.id == id }?.url.orEmpty()
+        progress.value = 100
+        loading.value = false
+        viewModelScope.launch { store.setActiveTabId(id) }
+    }
+
+    fun newTab() {
+        viewModelScope.launch {
+            val tab = store.addTab()
+            activeTabId.value = tab.id
+            address.value = ""
+            canBack.value = false
+            canForward.value = false
+            detectedTick.value += 1
+            store.setActiveTabId(tab.id)
+        }
+    }
+
+    fun closeTab(id: Long, holder: WebViewHolder) {
+        viewModelScope.launch {
+            val remaining = store.tabs().filter { it.id != id }
+            store.deleteTab(id)
+            sniffer.removeTab(id)
+            holder.destroy(id)
+            typedUrl.remove(id)
+            pageMeta.remove(id)
+            val next = remaining.lastOrNull() ?: store.addTab()
+            selectTab(next.id, holder)
+        }
+    }
+
+    fun back(holder: WebViewHolder) {
+        holder.get(activeTabId.value)?.takeIf { it.canGoBack() }?.goBack()
+    }
+
+    fun forward(holder: WebViewHolder) {
+        holder.get(activeTabId.value)?.takeIf { it.canGoForward() }?.goForward()
+    }
+
+    fun reload(holder: WebViewHolder) {
+        holder.get(activeTabId.value)?.reload()
+    }
+
+    fun toggleDesktop(holder: WebViewHolder) {
+        viewModelScope.launch {
+            val tab = store.tabs().firstOrNull { it.id == activeTabId.value } ?: return@launch
+            val next = !tab.desktop
+            store.updateTab(tab.copy(desktop = next))
+            val wv = holder.get(tab.id) ?: return@launch
+            withContext(Dispatchers.Main) {
+                WebViewHolder.applyDesktop(wv, next)
+                wv.reload()
+            }
+        }
+    }
+
+    fun toggleBookmark() {
+        viewModelScope.launch {
+            val tab = store.tabs().firstOrNull { it.id == activeTabId.value } ?: return@launch
+            val url = address.value.ifBlank { tab.url }
+            if (url.isBlank()) return@launch
+            if (store.isBookmarked(url)) store.removeBookmark(url)
+            else store.addBookmark(url, tab.title)
+        }
+    }
+
+    fun download(item: DetectedItem, name: String) {
+        if (item.kind == MediaKind.PAGE_RESOLVER) {
+            message.value = "This site needs a resolver (M7)."
+            return
+        }
+        if (item.url.startsWith("blob:")) {
+            message.value = "blob: URLs cannot be downloaded; pick the intercepted media URL."
+            return
+        }
+        val filename = MediaNames.finalize(name, item)
+        viewModelScope.launch {
+            val cookie = try {
+                CookieManager.getInstance().getCookie(item.url)
+            } catch (_: Exception) {
+                null
+            }
+            val headers = HeaderCapture.mergeCookie(item.headers, cookie)
+            app.manager.enqueue(item.url, headers, filename)
+            message.value = "Queued $filename"
+        }
+    }
+
+    fun clearMessage() {
+        message.value = null
+    }
+
+    fun loadIfNeeded(tab: TabEntity, wv: WebView) {
+        WebViewHolder.applyDesktop(wv, tab.desktop)
+        val current = wv.url
+        if (tab.url.isNotBlank() && (current.isNullOrBlank() || current == "about:blank")) {
+            sniffer.pinRestore(tab.id)
+            typedUrl.putIfAbsent(tab.id, tab.url)
+            wv.loadUrl(tab.url)
+        }
+    }
+
+    fun flushCookies() {
+        try {
+            CookieManager.getInstance().flush()
+        } catch (_: Exception) {
+            // CookieManager can throw if the WebView provider is not ready.
+        }
+    }
+
+    private fun enqueueWebDownload(
+        url: String,
+        userAgent: String,
+        contentDisposition: String?,
+        mime: String?,
+    ) {
+        if (!url.startsWith("http")) return
+        viewModelScope.launch {
+            val cookie = try {
+                CookieManager.getInstance().getCookie(url)
+            } catch (_: Exception) {
+                null
+            }
+            val headers = HeaderCapture.mergeCookie(
+                buildMap { if (userAgent.isNotBlank()) put("User-Agent", userAgent) },
+                cookie,
+            )
+            val suggested = PageTitles.suggestedFilename(ui.value.title, url, mime)
+            val fromCd = Filenames.fromContentDisposition(contentDisposition)
+            val item = DetectedItem(
+                url = url,
+                kind = MediaKind.MEDIA,
+                type = mime.orEmpty(),
+                size = null,
+                headers = headers,
+                pageUrl = address.value,
+                pageTitle = ui.value.title,
+                suggestedName = suggested,
+                detectedAt = System.currentTimeMillis(),
+            )
+            val name = MediaNames.finalize(fromCd.orEmpty(), item)
+            app.manager.enqueue(url, headers, name)
+            message.value = "Queued $name"
+        }
+    }
+
+    private fun displayUrl(url: String): String = if (url == "about:blank") "" else url
+}
+
+private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)

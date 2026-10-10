@@ -1,0 +1,35 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>(4) MSE blob player - Spotter</title>
+<body>
+<h1>blob / MSE</h1>
+<video id="v" controls width="320"></video>
+<p id="st">loading…</p>
+<script>
+  var url = "http://MEDIAHOST/clip-frag.mp4";
+  var v = document.getElementById("v");
+  var st = document.getElementById("st");
+  fetch(url).then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
+    if (!window.MediaSource) {
+      v.src = URL.createObjectURL(new Blob([buf], { type: "video/mp4" }));
+      st.textContent = "MediaSource missing; using blob URL";
+      return;
+    }
+    var ms = new MediaSource();
+    v.src = URL.createObjectURL(ms);
+    ms.addEventListener("sourceopen", function () {
+      try {
+        var sb = ms.addSourceBuffer('video/mp4; codecs="avc1.42E01E,mp4a.40.2"');
+        sb.addEventListener("updateend", function () {
+          if (!sb.updating && ms.readyState === "open") ms.endOfStream();
+        });
+        sb.appendBuffer(buf);
+        st.textContent = "MSE buffer appended";
+      } catch (e) {
+        v.src = URL.createObjectURL(new Blob([buf], { type: "video/mp4" }));
+        st.textContent = "MSE failed, blob fallback: " + e;
+      }
+    });
+  }).catch(function (e) { st.textContent = "fetch failed: " + e; });
+</script>
+</body>

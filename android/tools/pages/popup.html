@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>(5) Popup test - Spotter</title>
+<body>
+<h1>Popup blocker</h1>
+<p>On load this page calls <code>window.open</code> (must be blocked). The button below is a user gesture (must be allowed as a new tab).</p>
+<button id="go" type="button">Open on click</button>
+<script>
+  window.open("https://example.com/popup-on-load");
+  document.getElementById("go").onclick = function () {
+    window.open("https://example.com/popup-on-click");
+  };
+</script>
+</body>

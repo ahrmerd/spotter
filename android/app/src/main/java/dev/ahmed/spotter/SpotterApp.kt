@@ -9,6 +9,8 @@ import dev.ahmed.spotter.engine.model.DownloadState
 import dev.ahmed.spotter.engine.net.NetworkPolicy
 import dev.ahmed.spotter.engine.queue.DownloadManager
 import dev.ahmed.spotter.engine.sink.AndroidSinkFactory
+import dev.ahmed.spotter.browser.BrowserStore
+import dev.ahmed.spotter.engine.net.HttpClients
 import dev.ahmed.spotter.engine.store.RoomDownloadStore
 import dev.ahmed.spotter.engine.store.SpotterDatabase
 import dev.ahmed.spotter.service.AndroidNetworkPolicy
@@ -31,10 +33,16 @@ class SpotterApp : Application() {
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default + crashLog)
 
     val db: SpotterDatabase by lazy {
-        Room.databaseBuilder(this, SpotterDatabase::class.java, "spotter.db").build()
+        Room.databaseBuilder(this, SpotterDatabase::class.java, "spotter.db")
+            .addMigrations(SpotterDatabase.MIGRATION_1_2)
+            .build()
     }
 
     val store: RoomDownloadStore by lazy { RoomDownloadStore(db) }
+
+    val browserStore: BrowserStore by lazy { BrowserStore(db) }
+
+    val httpClient by lazy { HttpClients.create() }
 
     val networkPolicy: NetworkPolicy by lazy { AndroidNetworkPolicy(this) }
 
@@ -46,6 +54,7 @@ class SpotterApp : Application() {
             store = store,
             outputDir = privateDir,
             scope = appScope,
+            client = httpClient,
             networkPolicy = networkPolicy,
             logger = EngineLog { level, message, error ->
                 when (level) {

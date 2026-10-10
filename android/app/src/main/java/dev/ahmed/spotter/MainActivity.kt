@@ -27,15 +27,21 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import android.webkit.CookieManager
+import android.webkit.WebView
+import dev.ahmed.spotter.browser.WebViewHolder
+import dev.ahmed.spotter.ui.BrowserScreen
+import dev.ahmed.spotter.ui.BrowserViewModel
 import dev.ahmed.spotter.ui.DownloadsScreen
 import dev.ahmed.spotter.ui.DownloadsViewModel
 import dev.ahmed.spotter.ui.ShareUrls
 
 class MainActivity : ComponentActivity() {
     private val downloadsVm: DownloadsViewModel by viewModels()
+    private val browserVm: BrowserViewModel by viewModels()
+    private val browserHolder = WebViewHolder()
     private var shareUrl by mutableStateOf<String?>(null)
     private var clipboardUrl by mutableStateOf<String?>(null)
     private var lastClipboardOffered: String? = null
@@ -47,6 +53,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestNotifyPermission()
+        if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+            WebView.setWebContentsDebuggingEnabled(true)
+        }
         handleSend(intent)
         setContent {
             MaterialTheme {
@@ -77,9 +86,7 @@ class MainActivity : ComponentActivity() {
                                 onClipboardConsumed = { clipboardUrl = null },
                             )
                         } else {
-                            Box(Modifier.fillMaxSize(), Alignment.Center) {
-                                Text("Browser (todo)")
-                            }
+                            BrowserScreen(vm = browserVm, holder = browserHolder)
                         }
                     }
                 }
@@ -96,6 +103,16 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         maybeOfferClipboard()
+    }
+
+    override fun onPause() {
+        CookieManager.getInstance().flush()
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        browserHolder.destroyAll()
+        super.onDestroy()
     }
 
     private fun handleSend(intent: Intent?) {
