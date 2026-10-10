@@ -4,6 +4,7 @@ import dev.ahmed.spotter.engine.EngineLog
 import dev.ahmed.spotter.engine.Filenames
 import dev.ahmed.spotter.engine.model.DownloadRecord
 import dev.ahmed.spotter.engine.model.PartRecord
+import dev.ahmed.spotter.engine.net.CookieSource
 import dev.ahmed.spotter.engine.net.HeaderUtils
 import dev.ahmed.spotter.engine.net.ProbeResult
 import dev.ahmed.spotter.engine.net.RangeProbe
@@ -57,8 +58,9 @@ class HttpDownloader(
     private val connectionLimiter: AtomicReference<Semaphore> = AtomicReference(Semaphore(16)),
     private val persistEveryBytes: Long = 256 * 1024,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val cookies: CookieSource = CookieSource.NONE,
 ) {
-    private val probe = RangeProbe(client)
+    private val probe = RangeProbe(client, cookies)
 
     suspend fun download(
         downloadId: Long,
@@ -317,13 +319,16 @@ class HttpDownloader(
                 } else {
                     emptyMap()
                 }
-                val headers = HeaderUtils.merge(record.headers, extra)
+                val headers = HeaderUtils.merge(
+                    with(CookieSource) { record.headers.withCookie(record.url, cookies) },
+                    extra,
+                )
                 val req = Request.Builder().url(record.url).get().apply {
                     for ((k, v) in headers) header(k, v)
                 }.build()
                 client.newCall(req).execute().use { resp ->
                     when (resp.code) {
-                        403, 404, 410 -> throw NeedsRefreshException(resp.code, "HTTP ${resp.code}")
+                        401, 403, 404, 410 -> throw NeedsRefreshException(resp.code, "HTTP ${resp.code}")
                         200 -> {
                             if (record.ranged && extra.containsKey("Range")) {
                                 throw RestartDownloadException("entity changed or Range ignored")

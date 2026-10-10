@@ -10,6 +10,7 @@ import dev.ahmed.spotter.browser.AddressBar
 import dev.ahmed.spotter.browser.BrowserStore
 import dev.ahmed.spotter.browser.DetectedItem
 import dev.ahmed.spotter.browser.HeaderCapture
+import dev.ahmed.spotter.engine.store.HeaderJson
 import dev.ahmed.spotter.browser.MediaKind
 import dev.ahmed.spotter.browser.MediaNames
 import dev.ahmed.spotter.browser.PageTitles
@@ -53,7 +54,7 @@ data class BrowserUi(
 class BrowserViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as SpotterApp
     private val store: BrowserStore get() = app.browserStore
-    private val rangeProbe = RangeProbe(app.httpClient)
+    private val rangeProbe = RangeProbe(app.httpClient, app.cookieSource)
     private val nextTempId = AtomicLong(-1)
 
     private val activeTabId = MutableStateFlow(0L)
@@ -316,13 +317,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
         val filename = MediaNames.finalize(name, item)
         viewModelScope.launch {
-            val cookie = try {
-                CookieManager.getInstance().getCookie(item.url)
-            } catch (_: Exception) {
-                null
-            }
-            val headers = HeaderCapture.mergeCookie(item.headers, cookie)
-            app.manager.enqueue(item.url, headers, filename)
+            // Cookie/Authorization are not stored with the download; the engine reads cookies from the
+            // WebView's CookieManager for every request (see CookieSource).
+            app.manager.enqueue(item.url, HeaderJson.persistable(item.headers), filename)
             message.value = "Queued $filename"
         }
     }

@@ -68,24 +68,23 @@ JVM tests for both pass. I will re-run A1/A2 on the emulator during the M4 audit
 - Browser tabs survive an emulator restart.
 - The M2 fixes added on this branch (stale-connection retry, waiting notification) have JVM tests that pass.
 
-## Fix status (updated by the auditor)
-**IN PROGRESS: the auditor is fixing B1, B2 and B3 (and B4/B5 if cheap) on the `audit` branch, in the audit worktree.**
-The builder must **not** fix these (avoids duplicate work and merge conflicts). Keep working on M4. When the fixes are done this file
-will say so, with test output and device evidence; then `git merge audit` into `m4`. Files the auditor will touch:
-`app/build.gradle.kts`, `AndroidManifest.xml`, `engine/store/HeaderJson.kt` and the store mappers, a new `CookieSource` hook in
-`engine/net/` (used by `RangeProbe` and `HttpDownloader`), `browser/` + `ui/BrowserScreen.kt` (address bar and sheet),
-`tools/media_server.py`, and new tests. **M4/HLS code must use the same `CookieSource` hook** for playlist, segment and key requests
-instead of persisting cookies (details will be in the fix notes).
+## Fix status (applied by the auditor, branch `audit`, 2026-10-10)
+**B1, B2, B3, B4, B5 are FIXED and verified. Builder: `git merge audit` into `m4`, do not redo them.** B6 is M4's job; B7 is left open (minor).
+Verification: `./gradlew testDebugUnitTest` -> **83 tests, 0 failures** (81 + 2 new); `./gradlew connectedDebugAndroidTest` on the API 35 emulator -> **12 tests, 0 failures** (11 + `secretHeadersAreNotWrittenToTheDatabase`; `Migration1to2Test` now passes).
 
-| Finding | Status |
-|---|---|
-| B1 migration test + verification | in progress |
-| B2 cookies/Authorization persistence + allowBackup | in progress |
-| B3 address bar / keyboard | in progress |
-| B4 CORS on test media server | in progress |
-| B5 sheet labels / blob button | in progress |
-| B6 playlist download | left to M4 (builder) |
-| B7 bridge from all frames | not planned; builder may mitigate |
+| Finding | Status | What changed / evidence |
+|---|---|---|
+| B1 migration | FIXED | `app/build.gradle.kts`: `sourceSets["androidTest"].assets.srcDir("$projectDir/schemas")`. `Migration1to2Test` now inserts a v1 download, part and setting row and asserts they survive and the new tables exist. Passes on device |
+| B2 secrets | FIXED | New `engine/net/CookieSource` (on Android: the WebView `CookieManager`, wired in `SpotterApp.cookieSource`). `RangeProbe` and `HttpDownloader` add the live `Cookie` header **at request time**. `HeaderJson.encode` drops `Cookie`/`Authorization`/`Proxy-Authorization`/`Set-Cookie`, so neither table can hold them (covers `downloads.headers` and `sniffer_cache`). `BrowserViewModel.download` no longer merges the cookie into the stored headers. `allowBackup="false"`. HTTP 401 is now treated like 403 (NEEDS_REFRESH) because an `Authorization` header is no longer kept. Tests: `CookiePersistenceTest` (2, JVM) and the instrumented DB test. **Device evidence:** page set `document.cookie="sid=SECRET123"`; the test server logged `Cookie= sid=SECRET123` on the probe and the download requests; `strings` over `spotter.db`+`-wal` finds **0** occurrences of `SECRET123` and no `Cookie`/`Authorization` header keys; `dumpsys package` pkgFlags no longer contains `ALLOW_BACKUP`. Sniffer rows were already deleted when a tab closes (`BrowserStore.deleteTab`) |
+| B3 address bar | FIXED | `ui/BrowserScreen.kt`: the URL field is a full-width row above the icon row; focus and keyboard are cleared on submit and whenever the address changes. Device screenshot shows the full URL, no keyboard after load, and **one tap** on "1 media" opens the sheet |
+| B4 CORS | FIXED | `tools/media_server.py` sends `Access-Control-Allow-Origin: *` and expose-headers on media responses, so `mse.html` can fetch cross-origin |
+| B5 sheet | FIXED | `blob:` rows are listed last, labelled "In-page stream (cannot be downloaded directly)" and the button is disabled ("Use the other entry"); other rows show a readable type (or "Stream playlist (HLS/DASH)" / "Media file") and the host |
+| B6 playlist download | OPEN, M4 | HLS items must go to the HLS downloader and be named `.mp4` |
+| B7 bridge from all frames | OPEN (minor) | not changed |
+
+**For the M4 code (important):** the HLS downloader must add cookies the same way, through the `CookieSource` hook, for the playlist, every segment and the key request (`with(CookieSource) { headers.withCookie(url, cookies) }`), and must not persist `Cookie`/`Authorization`. `DownloadManager` now takes `cookies: CookieSource` and passes it to `HttpDownloader`; pass the same instance to any new component that makes requests.
+
+**Merge note:** the auditor touched `SpotterApp.kt`, `DownloadManager.kt` (3 lines), `HttpDownloader.kt`, `RangeProbe.kt`, `HeaderJson.kt`, `BrowserScreen.kt`, `BrowserViewModel.kt`, `AndroidManifest.xml`, `build.gradle.kts` and the tests listed above. The builder's uncommitted M4 edits to `SpotterApp.kt` and `DownloadManager.kt` may conflict on merge; resolve in favour of keeping both.
 
 ## To close M3
-Fix B1, B2, B3 (commit `M3 audit fixes: ...` on `m4`), address B4 to B7 or justify, and paste evidence under "M3 fixes" in `M4.md`. The auditor will re-run the migration test, check the database for cookies, and re-check the address bar and detection flow on the emulator.
+Merge `audit` into `m4`, and in `M4.md` add an "M3 fixes" note saying so. Do B6 as part of M4 and decide B7 (fix or accept). Re-check of A1 (second download after an idle gap) and A2 (waiting notification) on a device is still planned for the M4 audit.
