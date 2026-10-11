@@ -158,6 +158,19 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            Section("Ad blocker")
+            SwitchRow("Block ads, trackers and pop-ups", settings.adBlock) { vm.setAdBlock(it) }
+            Text(
+                "Blocks ad requests and hides ad boxes. Stops pop-ups opened by tapping the page and pages that send you to another site by themselves. Videos are never blocked. Filter lists: EasyList and EasyPrivacy (CC BY-SA 3.0 / GPLv3).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            val offSites = settings.adBlockOffHosts()
+            if (offSites.isNotEmpty()) {
+                Text("Off for: ${offSites.joinToString(", ")}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+                TextButton({ vm.clearAdBlockExceptions() }) { Text("Turn on for all sites") }
+            }
+
             Section("Appearance")
             ChipRow(
                 options = listOf("System", "Light", "Dark"),

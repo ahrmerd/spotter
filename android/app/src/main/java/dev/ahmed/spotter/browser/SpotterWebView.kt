@@ -31,7 +31,11 @@ class WebViewCallbacks(
     val onIntercept: (tabId: Long, url: String, headers: Map<String, String>) -> Unit,
     val onJsMedia: (tabId: Long, url: String, play: Boolean, frameOrigin: String) -> Unit,
     val onDownload: (url: String, userAgent: String, contentDisposition: String?, mime: String?, length: Long) -> Unit,
-    val onNewWindow: (userGesture: Boolean, attach: (WebView) -> Unit) -> Boolean,
+    val onNewWindow: (userGesture: Boolean, tapOnLink: Boolean, attach: (WebView) -> Unit) -> Boolean,
+    /** Ad blocker hooks; the defaults let everything through. */
+    val shouldBlockRequest: (tabId: Long, url: String, accept: String?) -> Boolean = { _, _, _ -> false },
+    val shouldBlockNavigation: (tabId: Long, url: String, hasGesture: Boolean) -> Boolean = { _, _, _ -> false },
+    val pageScript: (tabId: Long, url: String) -> String? = { _, _ -> null },
 )
 
 class WebViewHolder {
@@ -164,6 +168,7 @@ private class SpotterWebViewClient(
         val url = request.url?.toString() ?: return true
         val tabId = ref.id.get()
         if (PopupRules.blockHost(url, callbacks.typedUrl(tabId))) return true
+        if (callbacks.shouldBlockNavigation(tabId, url, request.hasGesture())) return true
         val scheme = request.url.scheme?.lowercase()
         if (scheme != "http" && scheme != "https") return true
         return false
@@ -173,7 +178,12 @@ private class SpotterWebViewClient(
         val url = request.url?.toString() ?: return null
         val headers = HashMap<String, String>()
         request.requestHeaders?.forEach { (k, v) -> if (v != null) headers[k] = v }
-        callbacks.onIntercept(ref.id.get(), url, headers)
+        val tabId = ref.id.get()
+        callbacks.onIntercept(tabId, url, headers)
+        // Main-frame loads are the user's (or handled in shouldOverrideUrlLoading); only sub-resources are blocked here.
+        if (!request.isForMainFrame && callbacks.shouldBlockRequest(tabId, url, headers["Accept"])) {
+            return WebResourceResponse("text/plain", "utf-8", java.io.ByteArrayInputStream(ByteArray(0)))
+        }
         return null
     }
 
@@ -185,6 +195,15 @@ private class SpotterWebViewClient(
         callbacks.onNavState(tabId, view.canGoBack(), view.canGoForward())
     }
 
+    override fun onPageCommitVisible(view: WebView, url: String?) {
+        injectAdScript(view, url)
+    }
+
+    private fun injectAdScript(view: WebView, url: String?) {
+        val js = callbacks.pageScript(ref.id.get(), url.orEmpty()) ?: return
+        view.evaluateJavascript(js, null)
+    }
+
     override fun onPageFinished(view: WebView, url: String?) {
         val tabId = ref.id.get()
         val u = url.orEmpty()
@@ -192,6 +211,7 @@ private class SpotterWebViewClient(
         callbacks.onPageFinished(tabId, u, title)
         callbacks.onNavState(tabId, view.canGoBack(), view.canGoForward())
         view.evaluateJavascript(SnifferJs.SOURCE, null)
+        injectAdScript(view, url)
     }
 }
 
@@ -219,7 +239,9 @@ private class SpotterChromeClient(
         resultMsg: Message?,
     ): Boolean {
         val msg = resultMsg ?: return false
-        return callbacks.onNewWindow(isUserGesture) { child ->
+        val hit = view.hitTestResult.type
+        val tapOnLink = hit == WebView.HitTestResult.SRC_ANCHOR_TYPE || hit == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
+        return callbacks.onNewWindow(isUserGesture, tapOnLink) { child ->
             val transport = msg.obj as WebView.WebViewTransport
             transport.webView = child
             msg.sendToTarget()

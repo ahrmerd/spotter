@@ -50,6 +50,15 @@ class SpotterApp : Application() {
 
     val httpClient by lazy { HttpClients.create() }
 
+    /** Bumped whenever the ad blocker blocks something, so the browser can refresh its counter. */
+    val adBlockTick = kotlinx.coroutines.flow.MutableStateFlow(0L)
+    val adBlocker: dev.ahmed.spotter.browser.adblock.AdBlocker by lazy {
+        dev.ahmed.spotter.browser.adblock.AdBlocker(
+            openLists = { listOf(assets.open("adblock/easylist.txt"), assets.open("adblock/easyprivacy.txt")) },
+            settings = { settingsSnap },
+            onBlocked = { adBlockTick.value = adBlockTick.value + 1 },
+        )
+    }
     val resolve: dev.ahmed.spotter.ui.ResolveCoordinator by lazy { dev.ahmed.spotter.ui.ResolveCoordinator(this) }
 
     /** Page resolvers (YouTube today). Add more here; the downloader and the UI pick them up from this list. */
@@ -115,6 +124,7 @@ class SpotterApp : Application() {
         super.onCreate()
         instance = this
         manager
+        adBlocker.loadAsync()
         NetworkMonitor.register(this)
         appScope.launch {
             refreshSettings()

@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import dev.ahmed.spotter.SpotterApp
 import dev.ahmed.spotter.browser.AddressBar
 import dev.ahmed.spotter.browser.BrowserStore
+import dev.ahmed.spotter.browser.adblock.AdBlocker
 import dev.ahmed.spotter.browser.DetectedItem
 import dev.ahmed.spotter.engine.store.HeaderJson
 import dev.ahmed.spotter.browser.MediaKind
@@ -63,6 +64,8 @@ data class BrowserUi(
     val canBack: Boolean = false,
     val canForward: Boolean = false,
     val bookmarked: Boolean = false,
+    val adBlockOn: Boolean = true,
+    val blocked: Int = 0,
     val detected: List<DetectedItem> = emptyList(),
     val bookmarks: List<BookmarkEntity> = emptyList(),
     val history: List<HistoryEntity> = emptyList(),
@@ -88,6 +91,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private val hlsHttp = HlsHttp(app.httpClient, cookies = app.cookieSource)
     private val typedUrl = ConcurrentHashMap<Long, String>()
     private val pageMeta = ConcurrentHashMap<Long, Pair<String, String>>()
+    private val prevUrl = ConcurrentHashMap<Long, String>()
 
     private val sniffer = SnifferCoordinator(
         scope = viewModelScope,
@@ -114,6 +118,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         onChange = { detectedTick.value = detectedTick.value + 1 },
     )
 
+    init {
+        viewModelScope.launch { app.adBlockTick.collect { detectedTick.value = detectedTick.value + 1 } }
+        viewModelScope.launch { app.settingsFlow.collect { detectedTick.value = detectedTick.value + 1 } }
+    }
+
     val ui: StateFlow<BrowserUi> = combine(
         store.observeTabs(),
         store.observeBookmarks(),
@@ -139,6 +148,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             canBack = extra.a,
             canForward = extra.b,
             bookmarked = bookmarks.any { it.url == url },
+            adBlockOn = app.adBlocker.enabledFor(url),
+            blocked = app.adBlocker.blockedCount(tabId),
             detected = sniffer.items(tabId),
             bookmarks = bookmarks,
             history = history,
@@ -160,6 +171,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 address.value = displayUrl(url)
             }
             pageMeta[tabId] = url to (pageMeta[tabId]?.second.orEmpty())
+            if (app.adBlocker.blockedCount(tabId) > 0 && AdBlocker.hostOf(url) != AdBlocker.hostOf(prevUrl[tabId].orEmpty())) {
+                app.adBlocker.resetCount(tabId)
+            }
+            prevUrl[tabId] = url
             sniffer.onNavigation(tabId)
         },
         onPageFinished = { tabId, url, title ->
@@ -211,8 +226,18 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         onDownload = { url, userAgent, contentDisposition, mime, _ ->
             enqueueWebDownload(url, userAgent, contentDisposition, mime)
         },
-        onNewWindow = { userGesture, attach ->
+        shouldBlockRequest = { tabId, url, accept ->
+            app.adBlocker.requestBlocked(tabId, url, AdBlocker.typeOf(url, accept, false), pageMeta[tabId]?.first.orEmpty())
+        },
+        shouldBlockNavigation = { tabId, url, gesture ->
+            app.adBlocker.navigationBlocked(tabId, url, gesture, pageMeta[tabId]?.first.orEmpty())
+        },
+        pageScript = { tabId, url -> app.adBlocker.pageScript(url.ifBlank { pageMeta[tabId]?.first.orEmpty() }) },
+        onNewWindow = { userGesture, tapOnLink, attach ->
             if (!PopupRules.allowNewWindow(userGesture)) return@WebViewCallbacks false
+            if (app.adBlocker.popupBlocked(activeTabId.value, pageMeta[activeTabId.value]?.first.orEmpty(), tapOnLink)) {
+                return@WebViewCallbacks false
+            }
             val host = holder.get(activeTabId.value) ?: return@WebViewCallbacks false
             val tempId = nextTempId.getAndDecrement()
             val child = holder.createWebView(host.context, tempId, cb)
@@ -249,6 +274,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         if (url.isBlank()) return
         val tabId = activeTabId.value
         typedUrl[tabId] = url
+        app.adBlocker.noteUserNavigation(tabId)
         address.value = url
         holder.get(tabId)?.loadUrl(url)
         viewModelScope.launch {
@@ -361,6 +387,19 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 WebViewHolder.applyDesktop(wv, next)
                 wv.reload()
             }
+        }
+    }
+
+    /** Switches the ad blocker off or on for the host of the current page, then reloads it. */
+    fun toggleAdBlockForSite(holder: WebViewHolder) {
+        val host = AdBlocker.hostOf(address.value)
+        if (host.isEmpty()) return
+        viewModelScope.launch {
+            val cur = app.settingsSnap
+            val off = cur.adBlockOffHosts().toMutableSet()
+            if (!off.remove(host)) off.add(host)
+            app.applySettings(cur.copy(adBlockOff = off.sorted().joinToString(",")))
+            withContext(Dispatchers.Main) { holder.get(activeTabId.value)?.reload() }
         }
     }
 

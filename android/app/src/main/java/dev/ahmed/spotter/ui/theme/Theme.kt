@@ -66,15 +66,15 @@ private val DarkColors = darkColorScheme(
     secondary = Color(0xFFCCC2DC),
     secondaryContainer = Color(0xFF4A4458),
     tertiary = Color(0xFF4DB6AC),
-    background = Color(0xFF14121A),
-    onBackground = Color(0xFFE6E0E9),
-    surface = Color(0xFF14121A),
-    onSurface = Color(0xFFE6E0E9),
+    background = Color(0xFF1A1822),
+    onBackground = Color(0xFFF3EEF7),
+    surface = Color(0xFF1A1822),
+    onSurface = Color(0xFFF3EEF7),
     surfaceVariant = Color(0xFF49454F),
-    onSurfaceVariant = Color(0xFFCAC4D0),
+    onSurfaceVariant = Color(0xFFDAD4E0),
     surfaceContainer = Color(0xFF211F26),
     surfaceContainerHigh = Color(0xFF2B2930),
-    outline = Color(0xFF938F99),
+    outline = Color(0xFFB0ABB8),
     outlineVariant = Color(0xFF49454F),
     error = Color(0xFFFFB4AB),
 )
@@ -94,17 +94,17 @@ private val LightSpotter = SpotterColors(
 )
 
 private val DarkSpotter = SpotterColors(
-    topBar = Color(0xFF2B2250),
+    topBar = Color(0xFF4527A0),
     onTopBar = Color.White,
     topBarMuted = Color(0xFFB9ABE0),
-    rowError = Color(0xFF5B3A12),
-    onRowError = Color(0xFFFFDDB2),
-    rowDone = Color(0xFF1E1C25),
-    rowSelected = Color(0xFF3B3160),
+    rowError = Color(0xFF7A4A12),
+    onRowError = Color(0xFFFFE8CC),
+    rowDone = Color(0xFF2A2733),
+    rowSelected = Color(0xFF4A3D7A),
     success = Color(0xFF81C784),
     warning = Color(0xFFFFB74D),
-    bottomBar = Color(0xFF1B1922),
-    addressPill = Color(0xFF3B3068),
+    bottomBar = Color(0xFF26232F),
+    addressPill = Color(0xFF5E3DB0),
 )
 
 private val SpotterTypography = Typography(

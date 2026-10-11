@@ -33,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
@@ -265,6 +266,10 @@ fun BrowserScreen(
                         DropdownMenuItem(text = { Text("Bookmarks") }, onClick = { menuOpen = false; showBookmarks = true })
                         DropdownMenuItem(text = { Text("History") }, onClick = { menuOpen = false; showHistory = true })
                         DropdownMenuItem(
+                            text = { Text(if (ui.adBlockOn) "Ad blocker: on (${ui.blocked} blocked)" else "Ad blocker: off for this site") },
+                            onClick = { menuOpen = false; vm.toggleAdBlockForSite(holder) },
+                        )
+                        DropdownMenuItem(
                             text = { Text(if (ui.desktop) "Desktop site: on" else "Desktop site: off") },
                             onClick = { menuOpen = false; vm.toggleDesktop(holder) },
                         )
@@ -302,6 +307,7 @@ fun BrowserScreen(
                     SuggestionPanel(
                         typed = addressField,
                         suggestions = suggestions,
+                        history = remember(addressField, ui.history) { historyMatches(ui.history, addressField) },
                         clipboardLink = remember(editing) { clipboardLink(context) },
                         onPick = { vm.submitAddress(it, holder); stopEditing() },
                         onFill = { addressField = it; vm.typing(it) },
@@ -360,6 +366,16 @@ fun BrowserScreen(
     }
 }
 
+/** Recent pages whose title or address contains every typed word, newest first, one per address (max 5). */
+internal fun historyMatches(history: List<dev.ahmed.spotter.engine.store.HistoryEntity>, typed: String): List<dev.ahmed.spotter.engine.store.HistoryEntity> {
+    val words = typed.trim().lowercase().split(' ').filter { it.isNotEmpty() }
+    if (words.isEmpty()) return emptyList()
+    return history.asSequence()
+        .filter { h -> val hay = (h.title + " " + h.url).lowercase(); words.all { it in hay } }
+        .distinctBy { it.url }
+        .take(5).toList()
+}
+
 private fun clipboardLink(context: Context): String? = try {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     val t = cm.primaryClip?.getItemAt(0)?.text?.toString()?.trim()
@@ -403,6 +419,7 @@ private fun BadgeIcon(count: Int, icon: @Composable () -> Unit) {
 private fun SuggestionPanel(
     typed: String,
     suggestions: List<String>,
+    history: List<dev.ahmed.spotter.engine.store.HistoryEntity>,
     clipboardLink: String?,
     onPick: (String) -> Unit,
     onFill: (String) -> Unit,
@@ -417,18 +434,24 @@ private fun SuggestionPanel(
             if (typed.isNotBlank()) {
                 item { SuggestionRow("Go to \"$typed\"", { onPick(typed) }, null) }
             }
+            items(history, key = { "h" + it.id }) { h ->
+                SuggestionRow(
+                    h.title.ifBlank { AddressBar.hostOf(h.url) } + "  ·  " + AddressBar.hostOf(h.url),
+                    { onPick(h.url) }, { onFill(h.url) }, history = true,
+                )
+            }
             items(suggestions) { s -> SuggestionRow(s, { onPick(s) }, { onFill(s) }) }
         }
     }
 }
 
 @Composable
-private fun SuggestionRow(text: String, onClick: () -> Unit, onFill: (() -> Unit)?) {
+private fun SuggestionRow(text: String, onClick: () -> Unit, onFill: (() -> Unit)?, history: Boolean = false) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Default.Search, null, Modifier.width(18.dp))
+        Icon(if (history) Icons.Default.History else Icons.Default.Search, null, Modifier.width(18.dp))
         Spacer(Modifier.width(12.dp))
         Text(text, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (onFill != null) {
