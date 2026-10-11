@@ -20,7 +20,6 @@ object DownloadNotifier {
     const val WAITING_ID = 3
 
     fun ensureChannel(context: Context) {
-        if (Build.VERSION.SDK_INT < 26) return
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (nm.getNotificationChannel(CHANNEL_ID) == null) {
             nm.createNotificationChannel(

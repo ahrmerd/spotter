@@ -4,6 +4,7 @@ import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMuxer
+import android.os.Build
 import java.io.File
 import java.io.IOException
 import java.nio.ByteBuffer
@@ -100,7 +101,8 @@ class MediaMuxerRemuxer : HlsRemuxer {
     private fun readCurrent(track: Track, buffer: ByteBuffer): ByteBuffer {
         var buf = buffer
         while (true) {
-            val sampleSize = track.ex.sampleSize
+            // getSampleSize() exists from API 28 (lint NewApi, minSdk 26). Older devices grow the buffer on failure below.
+            val sampleSize = if (Build.VERSION.SDK_INT >= 28) track.ex.sampleSize else -1L
             if (sampleSize > buf.capacity() && sampleSize > 0) {
                 val cap = MuxBuffers.grow(buf.capacity(), sampleSize.toInt())
                 if (sampleSize > cap) {

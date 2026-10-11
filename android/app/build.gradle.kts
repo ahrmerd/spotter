@@ -56,6 +56,17 @@ android {
         // Room's MigrationTestHelper reads the exported schema JSONs (1.json, 2.json) from the test assets.
         getByName("androidTest").assets.srcDir("$projectDir/schemas")
     }
+    lint {
+        abortOnError = true
+        checkReleaseBuilds = true
+        warningsAsErrors = false
+        // Dependency versions are pinned on purpose (reproducible builds, tested set); upgrades are a planned task.
+        // targetSdk 35 is the newest platform installed on the build machine.
+        disable += setOf("GradleDependency", "OldTargetApi")
+        // REQUEST_IGNORE_BATTERY_OPTIMIZATIONS is a Play Store policy issue only; Spotter is distributed as an APK and the
+        // permission is used once, after an explanation dialog, to open the system battery prompt.
+        disable += "BatteryLife"
+    }
     testOptions {
         unitTests.isReturnDefaultValues = true
         unitTests.all {

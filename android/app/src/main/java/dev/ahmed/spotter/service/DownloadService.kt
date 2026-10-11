@@ -106,12 +106,7 @@ class DownloadService : Service() {
 
     private fun stopIdle() {
         if (startedFg) {
-            if (Build.VERSION.SDK_INT >= 24) {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-            } else {
-                @Suppress("DEPRECATION")
-                stopForeground(true)
-            }
+            stopForeground(STOP_FOREGROUND_REMOVE)
         }
         stopSelf()
     }
@@ -140,11 +135,7 @@ class DownloadService : Service() {
             val app = context.applicationContext
             val intent = Intent(app, DownloadService::class.java)
             try {
-                if (Build.VERSION.SDK_INT >= 26) {
-                    app.startForegroundService(intent)
-                } else {
-                    app.startService(intent)
-                }
+                app.startForegroundService(intent)
             } catch (e: IllegalStateException) {
                 // Android 12+ refuses FGS from many background contexts. Leave rows QUEUED
                 // and tell the user to open the app (A2).
