@@ -52,4 +52,5 @@ Release builds run R8 (code shrinking and obfuscation) and resource shrinking. T
 ## Notes
 - Backups are disabled (`allowBackup=false`, `data_extraction_rules.xml`, `full_backup_content.xml`): the database holds download history and browser data.
 - Cookies and Authorization headers are never stored; the downloader reads cookies from the WebView at request time (`engine/net/CookieSource`).
-- Third-party licences: OkHttp, Room, WorkManager, Compose (Apache 2.0). If NewPipeExtractor (GPL-3.0) is added later (M7), the app becomes GPL-3.0 and the source must accompany any distribution.
+- Third-party licences: OkHttp, Room, WorkManager, Compose (Apache 2.0). **NewPipeExtractor (GPL-3.0) is linked for YouTube support (M7), so Spotter as a whole is GPL-3.0: anyone who receives the APK must be able to get the matching source.**
+- YouTube: paste or share a watch link, pick a quality. When YouTube changes and it stops working, update the `NewPipeExtractor` version in `app/build.gradle.kts`.

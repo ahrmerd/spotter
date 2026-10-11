@@ -30,7 +30,9 @@ class MediaMuxerRemuxer : HlsRemuxer {
                 val t = tracks[idx]
                 buf = readCurrent(t, buf)
                 var pts = t.pts
-                if (pts <= lastPts[idx]) pts = lastPts[idx] + 1
+                // Video with B-frames legitimately has non-increasing presentation times in decode order: never touch it.
+                // Audio timestamps must grow, otherwise several frames of one transport packet collapse onto one tick.
+                if (t.isAudio && pts <= lastPts[idx]) pts = lastPts[idx] + 1
                 lastPts[idx] = pts
                 info.offset = 0
                 info.size = t.size
@@ -91,7 +93,7 @@ class MediaMuxerRemuxer : HlsRemuxer {
             try {
                 val dst = muxer.addTrack(fmt)
                 ex.selectTrack(i)
-                tracks.add(Track(ex, dst, maxInput))
+                tracks.add(Track(ex, dst, maxInput, isAudio = mime.startsWith("audio/")))
             } catch (e: Exception) {
                 throw IOException("Codec $mime cannot go in MP4: ${e.message}")
             }
@@ -130,6 +132,7 @@ class MediaMuxerRemuxer : HlsRemuxer {
         val ex: MediaExtractor,
         val dst: Int,
         val maxInput: Int,
+        val isAudio: Boolean = false,
         var pts: Long = 0,
         var size: Int = 0,
         var flags: Int = 0,
