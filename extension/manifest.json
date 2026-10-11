@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Spotter",
-  "version": "0.3.1",
-  "description": "Detects videos on the page and sends them to the local download manager.",
+  "version": "0.4.0",
+  "description": "Detects videos on the page, sends them to the local download manager, and blocks ads and pop-ups.",
   "permissions": [
-    "webRequest",
-    "cookies",
     "contextMenus",
+    "cookies",
+    "declarativeNetRequest",
+    "storage",
     "tabs",
-    "storage"
+    "webRequest"
   ],
   "host_permissions": [
     "<all_urls>",
@@ -20,5 +21,28 @@
   "action": {
     "default_popup": "popup.html",
     "default_title": "Detected videos"
-  }
+  },
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "ads",
+        "enabled": true,
+        "path": "rules/ads.json"
+      }
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "adblock.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    }
+  ]
 }

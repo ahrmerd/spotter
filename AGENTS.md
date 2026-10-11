@@ -2,7 +2,7 @@
 
 Spotter: a download manager + video detector. Two parts exist:
 
-- `server/` + `extension/`: desktop version (Python, stdlib only) and a Chrome/Firefox extension. **Finished. Do not modify.**
+- `server/` + `extension/`: desktop version (Python, stdlib only) and a Chrome/Firefox extension. **Finished. Do not modify** (exception: the owner asked for ad blocking in the extension on 2026-10-11, v0.4.0).
   Report bugs you find there; don't fix them.
 - `android/`: the Android app. **This is the active work.**
 
