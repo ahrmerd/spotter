@@ -15,6 +15,7 @@ data class EngineSettings(
     val searchEngine: String = "google",
     val customSearchUrl: String = "",
     val searchSuggestions: Boolean = true,
+    val usagePing: Boolean = true,
     val adBlock: Boolean = true,
     /** Comma-separated hosts where the ad blocker is switched off. */
     val adBlockOff: String = "",
@@ -45,6 +46,7 @@ data class EngineSettings(
         const val KEY_SEARCH_ENGINE = "search_engine"
         const val KEY_CUSTOM_SEARCH_URL = "custom_search_url"
         const val KEY_SEARCH_SUGGESTIONS = "search_suggestions"
+        const val KEY_USAGE_PING = "usage_ping"
         const val KEY_AD_BLOCK = "ad_block"
         const val KEY_AD_BLOCK_OFF = "ad_block_off_hosts"
 
@@ -66,6 +68,7 @@ data class EngineSettings(
             searchEngine = rows[KEY_SEARCH_ENGINE]?.ifBlank { null } ?: "google",
             customSearchUrl = rows[KEY_CUSTOM_SEARCH_URL].orEmpty(),
             searchSuggestions = rows[KEY_SEARCH_SUGGESTIONS]?.toBooleanStrictOrNull() ?: true,
+            usagePing = rows[KEY_USAGE_PING]?.toBooleanStrictOrNull() ?: true,
             adBlock = rows[KEY_AD_BLOCK]?.toBooleanStrictOrNull() ?: true,
             adBlockOff = rows[KEY_AD_BLOCK_OFF].orEmpty(),
         )
@@ -91,6 +94,7 @@ data class EngineSettings(
         KEY_SEARCH_ENGINE to searchEngine,
         KEY_CUSTOM_SEARCH_URL to customSearchUrl,
         KEY_SEARCH_SUGGESTIONS to searchSuggestions.toString(),
+        KEY_USAGE_PING to usagePing.toString(),
         KEY_AD_BLOCK to adBlock.toString(),
         KEY_AD_BLOCK_OFF to adBlockOff,
     )

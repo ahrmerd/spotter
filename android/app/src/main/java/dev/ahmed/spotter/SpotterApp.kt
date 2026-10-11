@@ -118,6 +118,7 @@ class SpotterApp : Application() {
         settingsSnap = loaded
         settingsFlow.value = loaded
         BootReceiver.setEnabled(this, loaded.resumeOnBoot)
+        dev.ahmed.spotter.telemetry.UsagePing.apply(this, loaded.usagePing)
     }
 
     override fun onCreate() {

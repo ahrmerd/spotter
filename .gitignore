@@ -14,3 +14,4 @@ keystore.properties
 *.keystore
 android/app/release/
 .kotlin/
+extension/_metadata/

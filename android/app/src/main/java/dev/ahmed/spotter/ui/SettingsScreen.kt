@@ -226,6 +226,14 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            Section("Privacy")
+            SwitchRow("Share anonymous usage count", settings.usagePing) { vm.setUsagePing(it) }
+            Text(
+                "Once a day the app tells the Spotter site: a random install ID, the app version, the Android version and the CPU type. Nothing about your downloads, browsing, files or device identity.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
             Section("Logs")
             Row {
                 TextButton({

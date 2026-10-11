@@ -86,3 +86,21 @@ chrome.contextMenus.onClicked.addListener(info => {
   const url = info.linkUrl || info.srcUrl;
   if (url) send({url, referer: info.pageUrl}).catch(() => {});
 });
+
+
+// ---- Ad blocker switch (popup toggles chrome.storage.local: adblock = true/false, adblockOff = [hosts]) ----
+async function applyAdblock() {
+  const s = await chrome.storage.local.get(["adblock", "adblockOff"]);
+  const on = s.adblock !== false, off = s.adblockOff || [];
+  await chrome.declarativeNetRequest.updateEnabledRulesets(on ? {enableRulesetIds: ["ads"]} : {disableRulesetIds: ["ads"]});
+  // Sites switched off: allow everything they request and everything requested from them.
+  const rules = off.length ? [
+    {id: 1, priority: 2, action: {type: "allow"}, condition: {initiatorDomains: off}},
+    {id: 2, priority: 2, action: {type: "allow"}, condition: {requestDomains: off}},
+  ] : [];
+  await chrome.declarativeNetRequest.updateDynamicRules({removeRuleIds: [1, 2], addRules: rules});
+}
+chrome.storage.onChanged.addListener((c, area) => { if (area === "local" && (c.adblock || c.adblockOff)) applyAdblock(); });
+chrome.runtime.onInstalled.addListener(applyAdblock);
+chrome.runtime.onStartup.addListener(applyAdblock);
+applyAdblock().catch(() => {});

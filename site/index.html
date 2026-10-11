@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spotter: download manager and video grabber for Android</title>
+<meta name="description" content="Spotter downloads files and the videos you find on web pages. Free APK for Android 8 and newer.">
+<style>
+:root{--bg:#fbf8ff;--fg:#1c1b20;--mut:#5f5a66;--card:#f0ebf7;--pri:#4527a0;--onpri:#fff}
+@media(prefers-color-scheme:dark){:root{--bg:#1a1822;--fg:#f3eef7;--mut:#b9b3c2;--card:#26232f;--pri:#7e57c2}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif}
+header{background:#4527a0;color:#fff;padding:28px 16px}header div,main{max-width:720px;margin:0 auto}
+h1{margin:0;font-size:30px}header p{margin:6px 0 0;opacity:.9}main{padding:16px}
+.card{background:var(--card);border-radius:16px;padding:16px;margin:16px 0}
+.btn{display:block;text-align:center;background:var(--pri);color:var(--onpri);text-decoration:none;font-weight:600;border-radius:28px;padding:16px;font-size:18px}
+.mut{color:var(--mut);font-size:14px}h2{font-size:18px;margin:0 0 8px}ul{padding-left:20px;margin:6px 0}
+table{width:100%;border-collapse:collapse}td{padding:6px 0;border-bottom:1px solid #8883}a{color:var(--pri)}
+#warn{display:none;background:#ffcc80;color:#4e2600;border-radius:12px;padding:12px;margin-top:12px}
+</style></head><body>
+<header><div><h1>Spotter</h1><p>A download manager that spots the videos on web pages.</p></div></header>
+<main>
+<div class="card">
+  <a id="dl" class="btn" href="#">Download Spotter</a>
+  <p id="ver" class="mut" style="text-align:center;margin:10px 0 0">Loading latest version…</p>
+  <div id="warn"></div>
+</div>
+<div class="card"><h2>What it does</h2><ul>
+  <li>Downloads files fast (several connections per file), pauses and resumes.</li>
+  <li>Built-in browser that finds videos and streams (HLS) on the page and saves them as one file.</li>
+  <li>YouTube links, ad and pop-up blocking, tabs, search suggestions.</li></ul></div>
+<div class="card"><h2>How to install</h2><ul>
+  <li>Open this page on your phone and tap <b>Download Spotter</b>.</li>
+  <li>Open the file. Android asks to allow installs from your browser: allow it for this once.</li>
+  <li>One APK works on every phone with Android 8 or newer (arm64, arm32 and x86). There is no per-CPU version to pick.</li>
+  <li>Updates: come back here and install the newer version over the old one; your downloads stay.</li></ul></div>
+<div class="card"><h2>All versions</h2><table id="all"></table></div>
+<div class="card"><h2>Privacy</h2>
+  <p>Once a day the app sends this site a random install ID, the app version, the Android version and the CPU type, so the author can count how many devices use it. No IP address is stored, and nothing about your downloads, browsing, files, name or device identity is sent. You can switch it off in Spotter → Settings → Privacy. Apart from that, the app talks only to the sites you visit or download from, and to your search engine when you type in the address bar (switchable).</p>
+  <p>This site counts APK downloads (file name and day only).</p></div>
+<div class="card"><h2>Licence and source</h2>
+  <p>Spotter uses NewPipeExtractor (GPL-3.0), so Spotter is distributed under the GPL-3.0 as well. The matching source code is on <a id="src" href="#">this page</a>. Ad filter lists: EasyList and EasyPrivacy (CC BY-SA 3.0 / GPLv3).</p></div>
+</main>
+<script>
+fetch('releases.json',{cache:'no-store'}).then(r=>r.json()).then(d=>{
+  const rel=d.releases[0], apk=rel.files.find(f=>f.name.endsWith('.apk')), src=rel.files.find(f=>f.name.endsWith('.zip'));
+  const mb=n=>(n/1048576).toFixed(1)+' MB';
+  const dl=document.getElementById('dl');
+  dl.href='download.php?f='+encodeURIComponent(apk.name);
+  document.getElementById('ver').textContent='Version '+rel.version+' · '+mb(apk.size)+' · '+rel.date+' · Android 8+';
+  if(src) document.getElementById('src').href='download.php?f='+encodeURIComponent(src.name);
+  document.getElementById('all').innerHTML=d.releases.map(r=>{const a=r.files.find(f=>f.name.endsWith('.apk'));
+    return '<tr><td>'+r.version+'</td><td class="mut">'+r.date+'</td><td style="text-align:right"><a href="download.php?f='+encodeURIComponent(a.name)+'">APK ('+mb(a.size)+')</a></td></tr>'}).join('');
+  const ua=navigator.userAgent, w=document.getElementById('warn'), m=ua.match(/Android (\d+)/);
+  if(!/Android/.test(ua)){w.style.display='block';w.textContent='Spotter is an Android app. Open this page on your Android phone to install it.';}
+  else if(m && +m[1]<8){w.style.display='block';w.textContent='Your Android version ('+m[1]+') is too old. Spotter needs Android 8 or newer.';}
+}).catch(()=>{document.getElementById('ver').textContent='Could not load the version list.'});
+</script></body></html>

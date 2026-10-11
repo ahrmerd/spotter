@@ -5,6 +5,8 @@
   if (window.__spotterAdblock) return;
   window.__spotterAdblock = true;
 
+  // adblock-state.js (isolated world) sets this to 'off' when the user switched the blocker off here.
+  const enabled = () => document.documentElement.dataset.spotterAb !== 'off';
   const site = (h) => h.split('.').slice(-2).join('.');
   let lastLinkTap = 0;
   const onTap = (e) => {
@@ -20,7 +22,7 @@
   // window.open is allowed only right after a real tap on a link.
   const realOpen = window.open;
   window.open = function (url, ...rest) {
-    if (recentLinkTap()) return realOpen.call(this, url, ...rest);
+    if (!enabled() || recentLinkTap()) return realOpen.call(this, url, ...rest);
     console.debug('[spotter-adblock] blocked window.open', url);
     return null;
   };
@@ -29,7 +31,7 @@
   if (window.top === window && window.navigation && window.navigation.addEventListener) {
     navigation.addEventListener('navigate', (e) => {
       try {
-        if (!e.cancelable || e.navigationType === 'reload' || e.navigationType === 'traverse') return;
+        if (!enabled() || !e.cancelable || e.navigationType === 'reload' || e.navigationType === 'traverse') return;
         const to = new URL(e.destination.url);
         if (to.protocol !== 'http:' && to.protocol !== 'https:') return;
         if (site(to.hostname) === site(location.hostname)) return;
@@ -44,7 +46,7 @@
   // Invisible full-screen layer above the page that is not a player: remove it.
   const sweep = () => {
     const vw = innerWidth, vh = innerHeight;
-    if (!document.body) return;
+    if (!document.body || !enabled()) return;
     for (const el of document.body.querySelectorAll('div,a,span,section,ins,iframe')) {
       if (el.__spotterSeen) continue;
       const cs = getComputedStyle(el);

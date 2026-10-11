@@ -53,6 +53,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setSearchEngine(value: String) = update { it.copy(searchEngine = value) }
     fun setCustomSearchUrl(value: String) = update { it.copy(customSearchUrl = value.trim()) }
     fun setSearchSuggestions(value: Boolean) = update { it.copy(searchSuggestions = value) }
+    fun setUsagePing(value: Boolean) = update { it.copy(usagePing = value) }
     fun setAdBlock(value: Boolean) = update { it.copy(adBlock = value) }
     fun clearAdBlockExceptions() = update { it.copy(adBlockOff = "") }
     fun setTheme(value: String) = update { it.copy(theme = value) }
