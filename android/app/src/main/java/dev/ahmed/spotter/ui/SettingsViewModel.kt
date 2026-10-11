@@ -111,7 +111,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             "Download/Spotter (default)"
         } else {
             withContext(Dispatchers.IO) {
-                SafSink.displayName(app.contentResolver, uri).ifBlank { uri }
+                runCatching { SafSink.displayName(app.contentResolver, uri) }.getOrDefault("").ifBlank { uri }
             }
         }
     }

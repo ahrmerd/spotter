@@ -168,17 +168,29 @@ class SafSink(
             return renamed.toString()
         }
 
+        /**
+         * Human name of a document or of a picked folder (tree). A tree URI cannot be queried directly: it has to be
+         * turned into the tree's root document URI first, otherwise the provider throws UnsupportedOperationException
+         * (which crashed the app at start-up once a folder had been chosen). Never throws; falls back to the last
+         * path segment ("primary:Movies" -> "Movies").
+         */
         fun displayName(resolver: ContentResolver, uriString: String): String {
             if (uriString.isBlank()) return ""
+            val uri = try {
+                Uri.parse(uriString)
+            } catch (e: RuntimeException) {
+                return uriString
+            }
+            val fallback = uri.lastPathSegment.orEmpty().substringAfterLast(':').substringAfterLast('/')
             return try {
-                val uri = Uri.parse(uriString)
-                resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                val isDocument = uri.pathSegments.contains("document")
+                val queryUri = if (!isDocument && DocumentsContract.isTreeUri(uri)) treeDocumentUri(uri) else uri
+                resolver.query(queryUri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
                     if (c.moveToFirst()) c.getString(0).orEmpty() else ""
-                }.orEmpty().ifBlank { uri.lastPathSegment.orEmpty() }
-            } catch (e: SecurityException) {
-                ""
-            } catch (e: IllegalArgumentException) {
-                ""
+                }.orEmpty().ifBlank { fallback }
+            } catch (e: RuntimeException) {
+                // SecurityException (permission revoked), UnsupportedOperationException, IllegalArgumentException, ...
+                fallback
             }
         }
 

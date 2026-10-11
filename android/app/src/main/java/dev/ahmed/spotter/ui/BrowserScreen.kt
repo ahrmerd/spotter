@@ -231,7 +231,12 @@ fun BrowserScreen(
             items = ui.detected,
             names = names,
             onName = { url, value -> names = names + (url to value) },
-            onDownload = { item -> vm.download(item, names[item.url] ?: item.suggestedName) },
+            onDownload = { item ->
+                vm.download(item, names[item.url] ?: item.suggestedName)
+                // Close the sheet: it used to stay open after Download (owner bug), which also allowed a duplicate
+                // download by tapping again and left the HLS quality dialog stacked on top of it.
+                showDetected = false
+            },
             onDismiss = { showDetected = false },
         )
     }

@@ -60,5 +60,16 @@ The "Copy error" clipboard text, "Export logs" share sheet, the real effect of t
 - Wi-Fi-only gating works and the queue releases by itself.
 - The M4 fixes for E1 (remux of real-size video) and E3/E5/E6 hold on a device; the 720p MP4 plays and its audio is exact.
 
+## Fix status (applied by the auditor on branch `audit`, 2026-10-11)
+**F1 is FIXED and verified. The owner's BUG-1 (media list not closing) is FIXED and verified.** Builder: `git merge audit` into your next branch; do not redo them. F2 to F5 are still yours.
+
+| Item | Status | What changed / evidence |
+|---|---|---|
+| F1 save-folder crash loop | FIXED | `SafSink.displayName` turns a tree URI into its root document URI before querying, treats a `document` URI as is, and catches any `RuntimeException`, falling back to the folder name (`primary:Movies` -> `Movies`); `SettingsViewModel.refreshFolderLabel` also wraps the call so a bad stored folder can never crash the app. New instrumented test `SafDisplayNameTest` (2). **Device:** picked Movies in the system picker, tapped Use this folder and Allow: the app stayed up, Settings shows "Movies" with "Choose folder / Use default"; after a force-stop and relaunch the app and Settings opened normally; a download then landed in `/sdcard/Movies/` (4.5 MB, size matches). `connectedDebugAndroidTest`: **16 tests, 0 failures** |
+| BUG-1 media list stays open after Download | FIXED | `BrowserScreen`: `onDownload` now sets `showDetected = false` after calling the view model. **Device:** page with one video, opened "1 media", tapped Download: the sheet closed at once, the page is visible, and the Downloads list holds exactly one new item (`Bug1 test.mp4`, 11.8 MB). The same close also stops the HLS quality dialog stacking on an open sheet |
+| F2 name vs disk | OPEN, plus a new case | Also seen: a plain `.ts` file saved through MediaStore/SAF becomes `seg000.ts.m2ts` (MIME `video/mp2t` makes Android append `.m2ts`); the HLS `.ts` fallback was fixed with `application/octet-stream`, the plain-download path needs the same treatment. In that case the row and the disk name agree, but the double extension is wrong |
+| F3 remux | OPEN | repeated audio timestamps and the dropped last video frame remain |
+| F4, F5 | OPEN | wording and polish |
+
 ## To close M5
 Fix F1 first, then F2, F3 (and F4/F5 or justify); add the tests named above; rerun the picker flow on the emulator and paste the result. The auditor will repeat the folder flow, the name-collision check and the decode and frame-count checks.
