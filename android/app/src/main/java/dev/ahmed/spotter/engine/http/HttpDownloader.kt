@@ -176,11 +176,18 @@ class HttpDownloader(
         val real = try {
             sink.finalName()
         } catch (e: RuntimeException) {
-            return
+            ""
         }
-        if (real.isBlank()) return
-        val rec = store.get(downloadId) ?: return
-        if (rec.filename != real) store.update(rec.copy(filename = real))
+        // Published: record DONE uninterruptibly so a pause at this instant cannot undo it (see ResolvedDownloader).
+        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            val rec = store.get(downloadId) ?: return@withContext
+            store.update(
+                rec.copy(
+                    filename = if (real.isNotBlank()) real else rec.filename,
+                    state = dev.ahmed.spotter.engine.model.DownloadState.DONE,
+                ),
+            )
+        }
     }
 
     private data class Prepared(

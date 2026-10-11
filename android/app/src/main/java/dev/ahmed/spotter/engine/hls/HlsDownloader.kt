@@ -233,8 +233,16 @@ class HlsDownloader(
             } catch (e: RuntimeException) {
                 ""
             }
-            if (real.isNotBlank() && real != storedName) {
-                store.get(record.id)?.let { store.update(it.copy(filename = real)) }
+            // Published: record DONE uninterruptibly so a pause at this instant cannot undo it (see ResolvedDownloader).
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                store.get(record.id)?.let {
+                    store.update(
+                        it.copy(
+                            filename = if (real.isNotBlank()) real else it.filename,
+                            state = dev.ahmed.spotter.engine.model.DownloadState.DONE,
+                        ),
+                    )
+                }
             }
             workDir.deleteRecursively()
             return DownloadOutcome.Completed

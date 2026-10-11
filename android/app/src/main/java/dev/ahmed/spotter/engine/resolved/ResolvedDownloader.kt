@@ -23,6 +23,8 @@ import dev.ahmed.spotter.resolver.ResolvedUrls
 import dev.ahmed.spotter.resolver.SiteResolver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.NonCancellable
+import dev.ahmed.spotter.engine.model.DownloadState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
@@ -236,8 +238,12 @@ class ResolvedDownloader(
             } catch (e: RuntimeException) {
                 ""
             }
-            if (real.isNotBlank() && real != storedName) {
-                store.get(record.id)?.let { store.update(it.copy(filename = real)) }
+            // The file is published: record DONE now, uninterruptibly. A pause arriving at this instant must not turn a
+            // finished download back into PAUSED (the result returned below could be lost to the cancellation).
+            withContext(NonCancellable) {
+                store.get(record.id)?.let {
+                    store.update(it.copy(filename = real.ifBlank { it.filename }, state = DownloadState.DONE, error = null))
+                }
             }
             workDir.deleteRecursively()
             return DownloadOutcome.Completed
