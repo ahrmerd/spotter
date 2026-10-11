@@ -20,6 +20,7 @@ class MediaStoreSink(
     private val resolver: ContentResolver,
     val uri: Uri,
     private val pfd: ParcelFileDescriptor,
+    override val outputName: String,
 ) : FileSink {
     private val channel = FileOutputStream(pfd.fileDescriptor).channel
     private var closed = false
@@ -103,7 +104,7 @@ class MediaStoreSink(
         fun openExisting(resolver: ContentResolver, uri: Uri): MediaStoreSink? {
             return try {
                 val pfd = resolver.openFileDescriptor(uri, "rw") ?: return null
-                MediaStoreSink(resolver, uri, pfd)
+                MediaStoreSink(resolver, uri, pfd, queryDisplayName(resolver, uri).orEmpty())
             } catch (e: SecurityException) {
                 null
             } catch (e: java.io.FileNotFoundException) {
@@ -124,7 +125,8 @@ class MediaStoreSink(
                 ?: throw IOException("MediaStore insert failed for $displayName")
             val pfd = resolver.openFileDescriptor(uri, "rw")
                 ?: throw IOException("MediaStore open failed for $uri")
-            return MediaStoreSink(resolver, uri, pfd)
+            val actual = queryDisplayName(resolver, uri) ?: unique
+            return MediaStoreSink(resolver, uri, pfd, actual)
         }
 
         @RequiresApi(29)
@@ -154,6 +156,18 @@ class MediaStoreSink(
         }
 
         @RequiresApi(29)
+        fun queryDisplayName(resolver: ContentResolver, uri: Uri): String? {
+            return resolver.query(
+                uri,
+                arrayOf(MediaStore.MediaColumns.DISPLAY_NAME),
+                null,
+                null,
+                null,
+            )?.use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            }
+        }
+
         fun deleteUri(resolver: ContentResolver, resumePath: String) {
             if (!resumePath.startsWith("content:")) return
             resolver.delete(Uri.parse(resumePath), null, null)

@@ -29,7 +29,7 @@ class WebViewCallbacks(
     val onProgress: (tabId: Long, progress: Int) -> Unit,
     val onNavState: (tabId: Long, canBack: Boolean, canForward: Boolean) -> Unit,
     val onIntercept: (tabId: Long, url: String, headers: Map<String, String>) -> Unit,
-    val onJsMedia: (tabId: Long, url: String, play: Boolean) -> Unit,
+    val onJsMedia: (tabId: Long, url: String, play: Boolean, frameOrigin: String) -> Unit,
     val onDownload: (url: String, userAgent: String, contentDisposition: String?, mime: String?, length: Long) -> Unit,
     val onNewWindow: (userGesture: Boolean, attach: (WebView) -> Unit) -> Boolean,
 )
@@ -144,10 +144,15 @@ class SpotterBridge(
 ) {
     @JavascriptInterface
     fun media(url: String?, kind: String?) {
+        media(url, kind, "")
+    }
+
+    @JavascriptInterface
+    fun media(url: String?, kind: String?, frameOrigin: String?) {
         val u = url?.trim().orEmpty()
         if (!SnifferCoordinator.isHttpOrBlob(u)) return
         val play = kind?.equals("play", ignoreCase = true) == true
-        callbacks.onJsMedia(ref.id.get(), u, play)
+        callbacks.onJsMedia(ref.id.get(), u, play, frameOrigin?.trim().orEmpty())
     }
 }
 

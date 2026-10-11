@@ -61,17 +61,7 @@ class InMemoryDownloadStore : DownloadStore {
     }
 
     override suspend fun loadSettings(): EngineSettings = lock.withLock {
-        EngineSettings(
-            maxConcurrentDownloads = settings[EngineSettings.KEY_MAX_CONCURRENT]?.toIntOrNull()
-                ?: EngineSettings.DEFAULT_MAX_CONCURRENT,
-            connectionsPerFile = settings[EngineSettings.KEY_CONNECTIONS_PER_FILE]?.toIntOrNull()
-                ?: EngineSettings.DEFAULT_CONNECTIONS,
-            maxTotalConnections = settings[EngineSettings.KEY_MAX_TOTAL_CONNECTIONS]?.toIntOrNull()
-                ?: EngineSettings.DEFAULT_MAX_CONNECTIONS,
-            speedLimitBps = settings[EngineSettings.KEY_SPEED_LIMIT_BPS]?.toLongOrNull() ?: 0L,
-            wifiOnly = settings[EngineSettings.KEY_WIFI_ONLY]?.toBooleanStrictOrNull() ?: false,
-            resumeOnBoot = settings[EngineSettings.KEY_RESUME_ON_BOOT]?.toBooleanStrictOrNull() ?: false,
-        )
+        EngineSettings.fromRows(settings)
     }
 
     private fun emitLocked() {

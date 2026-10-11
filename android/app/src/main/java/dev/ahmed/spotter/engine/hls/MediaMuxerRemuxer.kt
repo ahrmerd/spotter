@@ -2,6 +2,7 @@ package dev.ahmed.spotter.engine.hls
 
 import android.media.MediaCodec
 import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaMuxer
 import java.io.File
 import java.io.IOException
@@ -14,25 +15,28 @@ class MediaMuxerRemuxer : HlsRemuxer {
         try {
             destMp4.parentFile?.mkdirs()
             muxer = MediaMuxer(destMp4.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-            val map = mutableListOf<Pair<MediaExtractor, Int>>()
-            addTracks(video, muxer, extractors, map)
-            if (audio != null) addTracks(audio, muxer, extractors, map)
-            if (map.isEmpty()) throw IOException("No tracks to mux")
+            val tracks = mutableListOf<Track>()
+            addTracks(video, muxer, extractors, tracks)
+            if (audio != null) addTracks(audio, muxer, extractors, tracks)
+            if (tracks.isEmpty()) throw IOException("No tracks to mux")
             muxer.start()
-            val buf = ByteBuffer.allocate(64 * 1024)
+            var buf = ByteBuffer.allocate(MuxBuffers.sizeFor(tracks.maxOf { it.maxInput }))
             val info = MediaCodec.BufferInfo()
-            for ((ex, dst) in map) {
-                while (true) {
-                    val n = ex.readSampleData(buf, 0)
-                    if (n < 0) break
-                    info.offset = 0
-                    info.size = n
-                    info.presentationTimeUs = ex.sampleTime.coerceAtLeast(0)
-                    info.flags = ex.sampleFlags
-                    muxer.writeSampleData(dst, buf, info)
-                    buf.clear()
-                    ex.advance()
-                }
+            val lastPts = LongArray(tracks.size) { -1L }
+            while (true) {
+                val idx = tracks.indices.filter { tracks[it].ex.sampleTime >= 0 }
+                    .minByOrNull { tracks[it].ex.sampleTime } ?: break
+                val t = tracks[idx]
+                buf = readCurrent(t, buf)
+                var pts = t.pts
+                if (pts <= lastPts[idx]) pts = lastPts[idx] + 1
+                lastPts[idx] = pts
+                info.offset = 0
+                info.size = t.size
+                info.presentationTimeUs = pts
+                info.flags = t.flags
+                muxer.writeSampleData(t.dst, buf, info)
+                t.ex.advance()
             }
             muxer.stop()
             muxer.release()
@@ -66,7 +70,7 @@ class MediaMuxerRemuxer : HlsRemuxer {
         file: File,
         muxer: MediaMuxer,
         extractors: MutableList<MediaExtractor>,
-        map: MutableList<Pair<MediaExtractor, Int>>,
+        tracks: MutableList<Track>,
     ) {
         val probe = MediaExtractor()
         probe.setDataSource(file.absolutePath)
@@ -77,14 +81,55 @@ class MediaMuxerRemuxer : HlsRemuxer {
             ex.setDataSource(file.absolutePath)
             extractors.add(ex)
             val fmt = ex.getTrackFormat(i)
-            val mime = fmt.getString(android.media.MediaFormat.KEY_MIME) ?: "unknown"
+            val mime = fmt.getString(MediaFormat.KEY_MIME) ?: "unknown"
+            val maxInput = if (fmt.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+                fmt.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE)
+            } else {
+                0
+            }
             try {
                 val dst = muxer.addTrack(fmt)
                 ex.selectTrack(i)
-                map.add(ex to dst)
+                tracks.add(Track(ex, dst, maxInput))
             } catch (e: Exception) {
                 throw IOException("Codec $mime cannot go in MP4: ${e.message}")
             }
         }
     }
+
+    private fun readCurrent(track: Track, buffer: ByteBuffer): ByteBuffer {
+        var buf = buffer
+        while (true) {
+            val sampleSize = track.ex.sampleSize
+            if (sampleSize > buf.capacity() && sampleSize > 0) {
+                val cap = MuxBuffers.grow(buf.capacity(), sampleSize.toInt())
+                if (sampleSize > cap) {
+                    throw IOException("sample $sampleSize exceeds remux ceiling $cap")
+                }
+                buf = ByteBuffer.allocate(cap)
+            }
+            val n = try {
+                track.ex.readSampleData(buf, 0)
+            } catch (e: IllegalArgumentException) {
+                val cap = MuxBuffers.grow(buf.capacity(), buf.capacity() * 2)
+                if (cap <= buf.capacity()) throw e
+                buf = ByteBuffer.allocate(cap)
+                continue
+            }
+            if (n < 0) throw IOException("readSampleData returned $n")
+            track.size = n
+            track.pts = track.ex.sampleTime.coerceAtLeast(0)
+            track.flags = track.ex.sampleFlags
+            return buf
+        }
+    }
+
+    private class Track(
+        val ex: MediaExtractor,
+        val dst: Int,
+        val maxInput: Int,
+        var pts: Long = 0,
+        var size: Int = 0,
+        var flags: Int = 0,
+    )
 }

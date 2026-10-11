@@ -14,6 +14,7 @@ class PrivateFileSink(
     private var closed = false
 
     override val outputPath: String get() = finalFile.absolutePath
+    override val outputName: String get() = finalFile.name
 
     override fun writeAt(position: Long, data: ByteArray, offset: Int, length: Int) {
         val buf = ByteBuffer.wrap(data, offset, length)

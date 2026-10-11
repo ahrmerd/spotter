@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
@@ -54,7 +55,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.content.ClipData
+import android.content.ClipboardManager
 import dev.ahmed.spotter.engine.Categories
+import dev.ahmed.spotter.engine.EngineErrors
 import dev.ahmed.spotter.engine.model.DownloadState
 import dev.ahmed.spotter.engine.hls.HlsProgress
 import dev.ahmed.spotter.service.DownloadNotifier
@@ -211,6 +215,11 @@ fun DownloadsScreen(
                             onOpen = { FileIntents.open(context, ui.record) },
                             onShare = { FileIntents.share(context, ui.record) },
                             onDeleteFile = { vm.deleteFile(ui.record.id) },
+                            onCopyError = {
+                                val text = vm.copyErrorText(ui.record)
+                                val clip = context.getSystemService(ClipboardManager::class.java)
+                                clip?.setPrimaryClip(ClipData.newPlainText("Spotter error", text))
+                            },
                         )
                     }
                 }
@@ -278,6 +287,7 @@ private fun DownloadRow(
     onOpen: () -> Unit,
     onShare: () -> Unit,
     onDeleteFile: () -> Unit,
+    onCopyError: () -> Unit,
 ) {
     val rec = ui.record
     val progress = if (rec.size > 0) (rec.downloaded.toFloat() / rec.size.toFloat()).coerceIn(0f, 1f) else 0f
@@ -319,6 +329,7 @@ private fun DownloadRow(
                 }
                 DownloadState.ERROR, DownloadState.NEEDS_REFRESH -> {
                     IconButton(onRetry) { Icon(Icons.Default.Refresh, "Retry") }
+                    IconButton(onCopyError) { Icon(Icons.Default.ContentCopy, "Copy error") }
                     IconButton(onRemove) { Icon(Icons.Default.Delete, "Remove") }
                 }
                 DownloadState.DONE -> {
@@ -356,9 +367,9 @@ private fun statusLine(ui: DownloadUi): String {
         DownloadState.QUEUED -> "Queued"
         DownloadState.RUNNING -> if (rec.size <= 0 && rec.downloaded > 0) "Downloading (size unknown)" else "Downloading"
         DownloadState.PAUSED -> if (!rec.ranged && rec.downloaded > 0) "Paused · resume restarts from 0" else "Paused"
-        DownloadState.DONE -> "Done${rec.error?.let { " · $it" } ?: ""}"
-        DownloadState.ERROR -> "Error${rec.error?.let { ": $it" } ?: ""}"
-        DownloadState.NEEDS_REFRESH -> "Needs refresh${rec.error?.let { ": $it" } ?: ""}"
+        DownloadState.DONE -> "Done${rec.error?.let { " · ${EngineErrors.userMessage(it)}" } ?: ""}"
+        DownloadState.ERROR -> "Error${rec.error?.let { ": ${EngineErrors.userMessage(it)}" } ?: ""}"
+        DownloadState.NEEDS_REFRESH -> "Needs refresh${rec.error?.let { ": ${EngineErrors.userMessage(it)}" } ?: ""}"
     }
     return "$state · $bytes$speed$eta"
 }

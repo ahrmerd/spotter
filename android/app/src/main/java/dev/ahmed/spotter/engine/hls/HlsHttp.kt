@@ -160,11 +160,11 @@ class HlsHttp(
         const val BUFFER = 64 * 1024
         const val MAX_PLAYLIST = 2 * 1024 * 1024
         const val MAX_KEY = 64
-        const val MAX_ATTEMPTS = 3
+        const val MAX_ATTEMPTS = 8
 
         fun backoffMs(attempt: Int): Long {
-            val shift = (attempt - 1).coerceIn(0, 8)
-            return minOf(8_000L, 250L shl shift)
+            val shift = (attempt - 1).coerceIn(0, 10)
+            return minOf(30_000L, 1_000L shl shift)
         }
     }
 }

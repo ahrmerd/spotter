@@ -5,10 +5,14 @@ import android.os.Environment
 import android.util.Log
 import androidx.room.Room
 import dev.ahmed.spotter.engine.EngineLog
+import dev.ahmed.spotter.engine.ErrorRedact
+import dev.ahmed.spotter.engine.RotatingFileLog
 import dev.ahmed.spotter.engine.model.DownloadState
+import dev.ahmed.spotter.engine.model.EngineSettings
 import dev.ahmed.spotter.engine.net.NetworkPolicy
 import dev.ahmed.spotter.engine.hls.MediaMuxerRemuxer
 import dev.ahmed.spotter.engine.queue.DownloadManager
+import dev.ahmed.spotter.engine.sink.AndroidFreeSpace
 import dev.ahmed.spotter.engine.sink.AndroidSinkFactory
 import dev.ahmed.spotter.browser.BrowserStore
 import dev.ahmed.spotter.engine.net.HttpClients
@@ -22,6 +26,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -55,24 +60,47 @@ class SpotterApp : Application() {
     val privateDir: File
         get() = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: File(filesDir, "Download")
 
+    val fileLog: RotatingFileLog by lazy { RotatingFileLog(File(filesDir, "logs")) }
+
+    // batteryPromptDone=true until Room loads, so the one-shot prompt does not flash on a cold start.
+    val settingsFlow = MutableStateFlow(EngineSettings(batteryPromptDone = true))
+    @Volatile var settingsSnap: EngineSettings = EngineSettings(batteryPromptDone = true)
+        private set
+
     val manager: DownloadManager by lazy {
+        val logger = EngineLog { level, message, error ->
+            fileLog.log(level, message, error)
+            val safe = ErrorRedact.redact(message)
+            when (level) {
+                "E" -> Log.e(TAG, safe, error)
+                "W" -> Log.w(TAG, safe, error)
+                else -> Log.i(TAG, safe)
+            }
+        }
         DownloadManager(
             store = store,
             outputDir = privateDir,
             scope = appScope,
             client = httpClient,
             networkPolicy = networkPolicy,
-            logger = EngineLog { level, message, error ->
-                when (level) {
-                    "E" -> Log.e(TAG, message, error)
-                    "W" -> Log.w(TAG, message, error)
-                    else -> Log.i(TAG, message)
-                }
-            },
-            sinkFactory = AndroidSinkFactory(contentResolver, privateDir),
+            logger = logger,
+            sinkFactory = AndroidSinkFactory(contentResolver, privateDir) { settingsSnap.saveFolderUri },
             hlsRemuxer = MediaMuxerRemuxer(),
             cookies = cookieSource,
+            freeSpace = AndroidFreeSpace(this),
         )
+    }
+
+    suspend fun applySettings(settings: EngineSettings) {
+        manager.setSettings(settings)
+        refreshSettings()
+    }
+
+    suspend fun refreshSettings() {
+        val loaded = store.loadSettings()
+        settingsSnap = loaded
+        settingsFlow.value = loaded
+        BootReceiver.setEnabled(this, loaded.resumeOnBoot)
     }
 
     override fun onCreate() {
@@ -81,7 +109,7 @@ class SpotterApp : Application() {
         manager
         NetworkMonitor.register(this)
         appScope.launch {
-            BootReceiver.setEnabled(this@SpotterApp, store.loadSettings().resumeOnBoot)
+            refreshSettings()
         }
         appScope.launch {
             store.observeAll()

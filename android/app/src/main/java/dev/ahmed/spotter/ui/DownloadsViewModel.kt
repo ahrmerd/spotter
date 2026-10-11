@@ -6,9 +6,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.ahmed.spotter.SpotterApp
 import dev.ahmed.spotter.engine.Categories
+import dev.ahmed.spotter.engine.ErrorRedact
 import dev.ahmed.spotter.engine.model.DownloadRecord
-import dev.ahmed.spotter.engine.model.EngineSettings
-import dev.ahmed.spotter.service.BootReceiver
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,7 +28,7 @@ class DownloadsViewModel(application: Application) : AndroidViewModel(applicatio
 
     val search = MutableStateFlow("")
     val filter = MutableStateFlow(Categories.ALL)
-    val settings = MutableStateFlow(EngineSettings())
+    val settings = app.settingsFlow
     val pendingUrl = MutableStateFlow<String?>(null)
     val userMessage = MutableStateFlow<String?>(null)
 
@@ -57,12 +56,6 @@ class DownloadsViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    init {
-        viewModelScope.launch {
-            settings.value = app.store.loadSettings()
-        }
-    }
-
     fun enqueue(url: String, filename: String? = null) {
         val trimmed = url.trim()
         if (trimmed.isEmpty()) return
@@ -79,17 +72,19 @@ class DownloadsViewModel(application: Application) : AndroidViewModel(applicatio
     fun pauseAll() = launch { manager.pauseAll() }
 
     fun setWifiOnly(value: Boolean) = launch {
-        val cur = app.store.loadSettings()
-        manager.setSettings(cur.copy(wifiOnly = value))
-        settings.value = app.store.loadSettings()
+        app.applySettings(app.store.loadSettings().copy(wifiOnly = value))
     }
 
     fun setResumeOnBoot(value: Boolean) = launch {
-        val cur = app.store.loadSettings()
-        manager.setSettings(cur.copy(resumeOnBoot = value))
-        BootReceiver.setEnabled(app, value)
-        settings.value = app.store.loadSettings()
+        app.applySettings(app.store.loadSettings().copy(resumeOnBoot = value))
     }
+
+    fun copyErrorText(rec: DownloadRecord): String = ErrorRedact.copyText(
+        filename = rec.filename,
+        url = rec.url,
+        state = rec.state.name,
+        error = rec.error,
+    )
 
     fun offerUrl(raw: String?) {
         val url = ShareUrls.extractHttpUrl(raw) ?: return

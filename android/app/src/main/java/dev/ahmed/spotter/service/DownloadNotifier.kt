@@ -129,6 +129,12 @@ object DownloadNotifier {
     }
 
     fun showWaiting(context: Context) {
+        val enabled = try {
+            (context.applicationContext as? dev.ahmed.spotter.SpotterApp)?.settingsSnap?.notificationsEnabled
+        } catch (e: ClassCastException) {
+            true
+        } ?: true
+        if (!enabled) return
         ensureChannel(context)
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(WAITING_ID, waiting(context))

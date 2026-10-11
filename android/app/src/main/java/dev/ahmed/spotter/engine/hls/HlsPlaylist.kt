@@ -65,6 +65,21 @@ sealed class HlsDocument {
 
         fun bestIndex(): Int = variants.indexOf(best())
 
+        /**
+         * Pick the variant for a saved default ("best", "1080", "720", "480", "360").
+         * Highest height at or below the cap; if every variant is taller, the shortest.
+         */
+        fun preferredIndex(pref: String): Int {
+            val p = pref.trim().lowercase().removeSuffix("p")
+            if (p.isEmpty() || p == "best") return bestIndex()
+            val cap = p.toIntOrNull() ?: return bestIndex()
+            val ranked = variants.mapIndexed { i, v -> i to (v.height ?: 0) }
+            val atOrBelow = ranked.filter { it.second in 1..cap }
+            if (atOrBelow.isNotEmpty()) return atOrBelow.maxBy { it.second }.first
+            val taller = ranked.filter { it.second > 0 }.minByOrNull { it.second }
+            return taller?.first ?: bestIndex()
+        }
+
         fun audioFor(variant: HlsVariant): HlsRendition? {
             val group = variant.audioGroupId ?: return null
             val inGroup = renditions.filter { it.type.equals("AUDIO", ignoreCase = true) && it.groupId == group }

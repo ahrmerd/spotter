@@ -204,9 +204,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             val meta = pageMeta[tabId]
             sniffer.onIntercept(tabId, url, headers, meta?.first.orEmpty(), meta?.second.orEmpty())
         },
-        onJsMedia = { tabId, url, play ->
+        onJsMedia = { tabId, url, play, frameOrigin ->
             val meta = pageMeta[tabId]
-            sniffer.onJs(tabId, url, meta?.first.orEmpty(), meta?.second.orEmpty(), play)
+            sniffer.onJs(tabId, url, meta?.first.orEmpty(), meta?.second.orEmpty(), play, frameOrigin)
         },
         onDownload = { url, userAgent, contentDisposition, mime, _ ->
             enqueueWebDownload(url, userAgent, contentDisposition, mime)
@@ -396,6 +396,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                         return
                     }
                     val best = doc.bestIndex()
+                    val pref = app.settingsSnap.defaultHlsQuality
+                    val selected = doc.preferredIndex(pref)
                     qualityPrompt.value = QualityPrompt(
                         item = item,
                         name = filename,
@@ -407,7 +409,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                                 audioUri = doc.audioFor(v)?.uri,
                             )
                         },
-                        selected = best,
+                        selected = selected,
                     )
                 }
                 is HlsDocument.Media -> {

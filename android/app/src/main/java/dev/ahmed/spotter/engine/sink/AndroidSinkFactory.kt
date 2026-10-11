@@ -11,8 +11,19 @@ import java.io.File
 class AndroidSinkFactory(
     private val resolver: ContentResolver,
     private val privateDir: File,
+    private val treeUri: () -> String = { "" },
 ) : FileSinkFactory {
     override fun open(filename: String, resumePath: String, mimeType: String?): FileSink {
+        val tree = treeUri().trim()
+        if (tree.isNotEmpty()) {
+            try {
+                return SafSink.open(resolver, tree, filename, resumePath, mimeType)
+            } catch (e: SecurityException) {
+                // Permission was revoked; fall through to the default location.
+            } catch (e: IllegalArgumentException) {
+                // Bad tree URI; fall through.
+            }
+        }
         return if (Build.VERSION.SDK_INT >= 29) {
             MediaStoreSink.open(resolver, filename, resumePath, mimeType)
         } else {
@@ -21,6 +32,8 @@ class AndroidSinkFactory(
     }
 
     override fun nameTaken(filename: String): Boolean {
+        val tree = treeUri().trim()
+        if (tree.isNotEmpty() && SafSink.nameTaken(resolver, tree, filename)) return true
         if (Build.VERSION.SDK_INT >= 29) {
             return filename in MediaStoreSink.takenNames(resolver)
         }
@@ -28,8 +41,12 @@ class AndroidSinkFactory(
     }
 
     override fun deletePartial(resumePath: String, filename: String) {
-        if (Build.VERSION.SDK_INT >= 29 && resumePath.startsWith("content:")) {
-            MediaStoreSink.deleteUri(resolver, resumePath)
+        if (resumePath.startsWith("content:")) {
+            if (Build.VERSION.SDK_INT >= 29) {
+                MediaStoreSink.deleteUri(resolver, resumePath)
+            } else {
+                SafSink.deleteUri(resolver, resumePath)
+            }
             return
         }
         super.deletePartial(resumePath, filename)
@@ -39,16 +56,28 @@ class AndroidSinkFactory(
     }
 
     override fun deleteFinished(resumePath: String) {
-        if (Build.VERSION.SDK_INT >= 29 && resumePath.startsWith("content:")) {
-            MediaStoreSink.deleteUri(resolver, resumePath)
+        if (resumePath.startsWith("content:")) {
+            if (Build.VERSION.SDK_INT >= 29) {
+                MediaStoreSink.deleteUri(resolver, resumePath)
+            } else {
+                SafSink.deleteUri(resolver, resumePath)
+            }
             return
         }
         super.deleteFinished(resumePath)
     }
 
     override fun rename(resumePath: String, newName: String): String {
-        if (Build.VERSION.SDK_INT >= 29 && resumePath.startsWith("content:")) {
-            return MediaStoreSink.renameUri(resolver, resumePath, newName)
+        if (resumePath.startsWith("content:")) {
+            return try {
+                SafSink.renameUri(resolver, resumePath, newName)
+            } catch (e: RuntimeException) {
+                if (Build.VERSION.SDK_INT >= 29) {
+                    MediaStoreSink.renameUri(resolver, resumePath, newName)
+                } else {
+                    resumePath
+                }
+            }
         }
         return super.rename(resumePath, newName)
     }

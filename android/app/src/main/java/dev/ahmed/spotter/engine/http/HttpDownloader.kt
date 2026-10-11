@@ -11,6 +11,8 @@ import dev.ahmed.spotter.engine.net.RangeProbe
 import dev.ahmed.spotter.engine.net.TokenBucket
 import dev.ahmed.spotter.engine.sink.FileSink
 import dev.ahmed.spotter.engine.sink.FileSinkFactory
+import dev.ahmed.spotter.engine.sink.FreeSpace
+import dev.ahmed.spotter.engine.sink.InsufficientSpaceException
 import dev.ahmed.spotter.engine.store.DownloadStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -59,6 +61,7 @@ class HttpDownloader(
     private val persistEveryBytes: Long = 256 * 1024,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val cookies: CookieSource = CookieSource.NONE,
+    private val freeSpace: FreeSpace = FreeSpace.UNLIMITED,
 ) {
     private val probe = RangeProbe(client, cookies)
 
@@ -79,8 +82,13 @@ class HttpDownloader(
                 sink?.close()
                 sink = sinkFactory.open(record.filename, record.outputPath, record.mimeType)
                 val openSink = sink!!
-                if (record.outputPath.isEmpty() || record.outputPath != openSink.outputPath) {
-                    record = record.copy(outputPath = openSink.outputPath)
+                if (record.outputPath.isEmpty() || record.outputPath != openSink.outputPath ||
+                    (openSink.outputName.isNotEmpty() && openSink.outputName != record.filename)
+                ) {
+                    record = record.copy(
+                        outputPath = openSink.outputPath,
+                        filename = openSink.outputName.ifBlank { record.filename },
+                    )
                     store.update(record)
                 }
                 try {
@@ -92,7 +100,21 @@ class HttpDownloader(
                         if (!intact) throw RestartDownloadException("partial file missing or truncated (length $len)")
                     }
                     if (record.size > 0) {
-                        openSink.setLength(record.size)
+                        freeSpace.check(record.size, openSink.outputPath)
+                        try {
+                            openSink.setLength(record.size)
+                        } catch (e: InsufficientSpaceException) {
+                            throw e
+                        } catch (e: IOException) {
+                            val msg = e.message.orEmpty().lowercase()
+                            if ("no space" in msg || "enospc" in msg) {
+                                throw InsufficientSpaceException(
+                                    record.size,
+                                    freeSpace.availableBytes(openSink.outputPath),
+                                )
+                            }
+                            throw e
+                        }
                     } else if (!record.ranged) {
                         openSink.setLength(0)
                     }

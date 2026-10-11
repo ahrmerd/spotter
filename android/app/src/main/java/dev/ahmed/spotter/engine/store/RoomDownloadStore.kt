@@ -53,17 +53,7 @@ class RoomDownloadStore(private val db: SpotterDatabase) : DownloadStore {
 
     override suspend fun loadSettings(): EngineSettings {
         val rows = settings.getAll().associate { it.key to it.value }
-        return EngineSettings(
-            maxConcurrentDownloads = rows[EngineSettings.KEY_MAX_CONCURRENT]?.toIntOrNull()
-                ?: EngineSettings.DEFAULT_MAX_CONCURRENT,
-            connectionsPerFile = rows[EngineSettings.KEY_CONNECTIONS_PER_FILE]?.toIntOrNull()
-                ?: EngineSettings.DEFAULT_CONNECTIONS,
-            maxTotalConnections = rows[EngineSettings.KEY_MAX_TOTAL_CONNECTIONS]?.toIntOrNull()
-                ?: EngineSettings.DEFAULT_MAX_CONNECTIONS,
-            speedLimitBps = rows[EngineSettings.KEY_SPEED_LIMIT_BPS]?.toLongOrNull() ?: 0L,
-            wifiOnly = rows[EngineSettings.KEY_WIFI_ONLY]?.toBooleanStrictOrNull() ?: false,
-            resumeOnBoot = rows[EngineSettings.KEY_RESUME_ON_BOOT]?.toBooleanStrictOrNull() ?: false,
-        )
+        return EngineSettings.fromRows(rows)
     }
 }
 

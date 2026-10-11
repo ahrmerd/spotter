@@ -17,6 +17,7 @@ import dev.ahmed.spotter.engine.net.HttpClients
 import dev.ahmed.spotter.engine.net.NetworkPolicy
 import dev.ahmed.spotter.engine.net.TokenBucket
 import dev.ahmed.spotter.engine.sink.FileSinkFactory
+import dev.ahmed.spotter.engine.sink.FreeSpace
 import dev.ahmed.spotter.engine.sink.PrivateFileSink
 import dev.ahmed.spotter.engine.store.DownloadStore
 import kotlinx.coroutines.CancellationException
@@ -50,6 +51,7 @@ class DownloadManager(
     sinkFactory: FileSinkFactory? = null,
     hlsRemuxer: HlsRemuxer = KeepTsRemuxer,
     cookies: CookieSource = CookieSource.NONE,
+    freeSpace: FreeSpace = FreeSpace.UNLIMITED,
 ) {
     private val connectionLimiter = AtomicReference(Semaphore(EngineSettings.DEFAULT_MAX_CONNECTIONS))
     private val downloader = HttpDownloader(
@@ -60,6 +62,7 @@ class DownloadManager(
         connectionLimiter = connectionLimiter,
         ioDispatcher = ioDispatcher,
         cookies = cookies,
+        freeSpace = freeSpace,
     )
     private val hlsDownloader = HlsDownloader(
         client = client,
@@ -70,6 +73,7 @@ class DownloadManager(
         ioDispatcher = ioDispatcher,
         remuxer = hlsRemuxer,
         cookies = cookies,
+        freeSpace = freeSpace,
     )
     private val sinks = sinkFactory ?: FileSinkFactory { filename, resumePath, _ ->
         PrivateFileSink.forName(outputDir, filename, resumePath)
@@ -262,12 +266,9 @@ class DownloadManager(
     }
 
     suspend fun setSettings(settings: EngineSettings) {
-        store.setSetting(EngineSettings.KEY_MAX_CONCURRENT, settings.maxConcurrentDownloads.toString())
-        store.setSetting(EngineSettings.KEY_CONNECTIONS_PER_FILE, settings.connectionsPerFile.toString())
-        store.setSetting(EngineSettings.KEY_MAX_TOTAL_CONNECTIONS, settings.maxTotalConnections.toString())
-        store.setSetting(EngineSettings.KEY_SPEED_LIMIT_BPS, settings.speedLimitBps.toString())
-        store.setSetting(EngineSettings.KEY_WIFI_ONLY, settings.wifiOnly.toString())
-        store.setSetting(EngineSettings.KEY_RESUME_ON_BOOT, settings.resumeOnBoot.toString())
+        for ((key, value) in settings.toRows()) {
+            store.setSetting(key, value)
+        }
         tokenBucket.setRate(settings.speedLimitBps)
         applyConnectionCap(settings.maxTotalConnections)
         if (networkBlocked(settings)) {
