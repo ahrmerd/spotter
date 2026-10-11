@@ -31,6 +31,13 @@ table{width:100%;border-collapse:collapse}td{padding:6px 0;border-bottom:1px sol
   <li>Open the file. Android asks to allow installs from your browser: allow it for this once.</li>
   <li>One APK works on every phone with Android 8 or newer (arm64, arm32 and x86). There is no per-CPU version to pick.</li>
   <li>Updates: come back here and install the newer version over the old one; your downloads stay.</li></ul></div>
+<div class="card"><h2>Seeing a warning when you install?</h2>
+  <p>Spotter is not in the Play Store and is signed with its author's own key, so Google Play Protect and Chrome do not know it yet and may say "unsafe" or "not commonly downloaded". This is normal for apps shared outside the Play Store. The source code is public (see below), so you can check what it does.</p>
+  <ul>
+  <li><b>Chrome says the file may be dangerous:</b> tap <b>Keep</b> (or the ⋮ menu → Keep), then <b>Download anyway</b>.</li>
+  <li><b>Play Protect says the app is blocked or unsafe:</b> tap <b>More details</b>, then <b>Install anyway</b>.</li>
+  <li><b>No such button:</b> open the Play Store → your profile → Play Protect → ⚙ and turn off "Scan apps with Play Protect" until the install is done, then turn it back on.</li>
+  <li><b>"App not installed":</b> an older Spotter signed with a different key is on the phone. Uninstall it first, then install again.</li></ul></div>
 <div class="card"><h2>All versions</h2><table id="all"></table></div>
 <div class="card"><h2>Privacy</h2>
   <p>Once a day the app sends this site a random install ID, the app version, the Android version and the CPU type, so the author can count how many devices use it. No IP address is stored, and nothing about your downloads, browsing, files, name or device identity is sent. You can switch it off in Spotter → Settings → Privacy. Apart from that, the app talks only to the sites you visit or download from, and to your search engine when you type in the address bar (switchable).</p>
