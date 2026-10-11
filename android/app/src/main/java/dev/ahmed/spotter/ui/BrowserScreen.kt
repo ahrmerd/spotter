@@ -436,7 +436,7 @@ private fun DetectedRow(
             label = { Text("File name") },
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onDownload, enabled = item.kind != MediaKind.PAGE_RESOLVER && !isBlob) {
+            TextButton(onDownload, enabled = !isBlob) {
                 Text(if (isBlob) "Use the other entry" else "Download")
             }
         }

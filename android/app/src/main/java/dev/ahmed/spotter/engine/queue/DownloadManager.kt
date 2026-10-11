@@ -52,6 +52,7 @@ class DownloadManager(
     hlsRemuxer: HlsRemuxer = KeepTsRemuxer,
     cookies: CookieSource = CookieSource.NONE,
     freeSpace: FreeSpace = FreeSpace.UNLIMITED,
+    resolvers: List<dev.ahmed.spotter.resolver.SiteResolver> = emptyList(),
 ) {
     private val connectionLimiter = AtomicReference(Semaphore(EngineSettings.DEFAULT_MAX_CONNECTIONS))
     private val downloader = HttpDownloader(
@@ -67,6 +68,18 @@ class DownloadManager(
     private val hlsDownloader = HlsDownloader(
         client = client,
         store = store,
+        logger = logger,
+        tokenBucket = tokenBucket,
+        connectionLimiter = connectionLimiter,
+        ioDispatcher = ioDispatcher,
+        remuxer = hlsRemuxer,
+        cookies = cookies,
+        freeSpace = freeSpace,
+    )
+    private val resolvedDownloader = dev.ahmed.spotter.engine.resolved.ResolvedDownloader(
+        client = client,
+        store = store,
+        resolvers = resolvers,
         logger = logger,
         tokenBucket = tokenBucket,
         connectionLimiter = connectionLimiter,
@@ -361,7 +374,14 @@ class DownloadManager(
             try {
                 val settings = store.loadSettings()
                 val current = store.get(id) ?: return@launch
-                val outcome = if (HlsPlaylist.looksLikeHls(current.url, current.headers, current.mimeType)) {
+                val outcome = if (dev.ahmed.spotter.resolver.ResolvedUrls.isResolved(current.url)) {
+                    resolvedDownloader.download(
+                        downloadId = id,
+                        sinkFactory = sinks,
+                        workRoot = outputDir,
+                        allocateName = { suggested -> allocateName(id, suggested) },
+                    )
+                } else if (HlsPlaylist.looksLikeHls(current.url, current.headers, current.mimeType)) {
                     hlsDownloader.download(
                         downloadId = id,
                         sinkFactory = sinks,
@@ -455,9 +475,11 @@ class DownloadManager(
         if (rec.filename.isNotEmpty()) {
             File(outputDir, "${rec.filename}.part").takeIf { it.exists() }?.delete()
         }
-        val hlsDir = File(outputDir, ".hls-${rec.id}")
-        if (hlsDir.exists() && !hlsDir.deleteRecursively()) {
-            logger.warn("delete HLS work dir failed id=${rec.id}")
+        for (prefix in listOf(".hls-", ".res-")) {
+            val work = File(outputDir, "$prefix${rec.id}")
+            if (work.exists() && !work.deleteRecursively()) {
+                logger.warn("delete work dir failed ${work.name}")
+            }
         }
     }
 

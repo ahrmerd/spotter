@@ -50,6 +50,13 @@ class SpotterApp : Application() {
 
     val httpClient by lazy { HttpClients.create() }
 
+    val resolve: dev.ahmed.spotter.ui.ResolveCoordinator by lazy { dev.ahmed.spotter.ui.ResolveCoordinator(this) }
+
+    /** Page resolvers (YouTube today). Add more here; the downloader and the UI pick them up from this list. */
+    val resolvers: List<dev.ahmed.spotter.resolver.SiteResolver> by lazy {
+        listOf(dev.ahmed.spotter.resolver.YoutubeResolver(httpClient))
+    }
+
     /** Cookies come from the WebView at request time and are never stored with a download (see CookieSource). */
     val cookieSource = dev.ahmed.spotter.engine.net.CookieSource { url ->
         runCatching { android.webkit.CookieManager.getInstance().getCookie(url) }.getOrNull()
@@ -88,6 +95,7 @@ class SpotterApp : Application() {
             hlsRemuxer = MediaMuxerRemuxer(),
             cookies = cookieSource,
             freeSpace = AndroidFreeSpace(this),
+            resolvers = resolvers,
         )
     }
 

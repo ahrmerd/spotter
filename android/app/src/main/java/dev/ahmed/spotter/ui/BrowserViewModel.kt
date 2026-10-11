@@ -332,7 +332,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     fun download(item: DetectedItem, name: String) {
         if (item.kind == MediaKind.PAGE_RESOLVER) {
-            message.value = "This site needs a resolver (M7)."
+            if (app.resolve.handles(item.url)) {
+                app.resolve.start(item.url, name)
+            } else {
+                message.value = "This site is not supported yet."
+            }
             return
         }
         if (item.url.startsWith("blob:")) {

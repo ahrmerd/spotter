@@ -59,6 +59,11 @@ class DownloadsViewModel(application: Application) : AndroidViewModel(applicatio
     fun enqueue(url: String, filename: String? = null) {
         val trimmed = url.trim()
         if (trimmed.isEmpty()) return
+        // Pages such as a YouTube watch link need a lookup and a quality choice first.
+        if (app.resolve.handles(trimmed)) {
+            app.resolve.start(trimmed, filename?.ifBlank { null })
+            return
+        }
         launch { manager.enqueue(trimmed, filename = filename?.ifBlank { null }) }
     }
 

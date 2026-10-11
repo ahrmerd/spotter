@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
                     }
                     if (settings.notificationsEnabled) requestNotifyPermission()
                 }
+                dev.ahmed.spotter.ui.ResolveDialogHost((application as SpotterApp).resolve)
                 Scaffold(bottomBar = {
                     NavigationBar {
                         NavigationBarItem(
