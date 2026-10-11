@@ -6,6 +6,13 @@ interface FileSink : Closeable {
     val outputPath: String
     /** Name on disk after the provider (MediaStore may rewrite the extension). */
     val outputName: String get() = ""
+
+    /**
+     * The name the file really has once [complete] has run. MediaStore resolves name collisions only when a pending file
+     * is published, and it cannot see files left by an earlier install of the app, so the name chosen up front can
+     * differ ("index.mp4" became "index (2).mp4"). Callers store this name so the list matches the disk (M5 audit F2).
+     */
+    fun finalName(): String = outputName
     fun writeAt(position: Long, data: ByteArray, offset: Int, length: Int)
     fun setLength(length: Long)
     /** Current size of the backing file; used to detect a missing/truncated partial file on resume. */

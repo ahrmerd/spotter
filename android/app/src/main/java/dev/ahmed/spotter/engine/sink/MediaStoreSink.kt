@@ -64,6 +64,13 @@ class MediaStoreSink(
         }
     }
 
+    override fun finalName(): String =
+        try {
+            queryDisplayName(resolver, uri).orEmpty().ifBlank { outputName }
+        } catch (e: RuntimeException) {
+            outputName
+        }
+
     override fun discardPartial() {
         closeQuiet()
         resolver.delete(uri, null, null)

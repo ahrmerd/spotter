@@ -307,7 +307,7 @@ private fun DownloadRow(
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            statusLine(ui),
+            statusLine(ui, queueReason(LocalContext.current)),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 2,
@@ -349,7 +349,18 @@ private fun DownloadRow(
     }
 }
 
-private fun statusLine(ui: DownloadUi): String {
+/** Why a queued item is not running yet (M5 audit F4): no network, or Wi-Fi only without Wi-Fi. */
+private fun queueReason(context: android.content.Context): String? {
+    val app = context.applicationContext as? dev.ahmed.spotter.SpotterApp ?: return null
+    val policy = app.networkPolicy
+    return when {
+        !policy.isOnline() -> "Waiting for network"
+        app.settingsSnap.wifiOnly && !policy.canDownload() -> "Waiting for Wi-Fi"
+        else -> null
+    }
+}
+
+private fun statusLine(ui: DownloadUi, queueReason: String? = null): String {
     val rec = ui.record
     val bytes = when {
         HlsProgress.isSegmentMode(rec) && rec.size > 0 -> HlsProgress.line(rec.downloaded, rec.size)
@@ -364,7 +375,7 @@ private fun statusLine(ui: DownloadUi): String {
     }
     val eta = ui.etaSeconds?.let { " · ${formatEta(it)}" }.orEmpty()
     val state = when (rec.state) {
-        DownloadState.QUEUED -> "Queued"
+        DownloadState.QUEUED -> queueReason ?: "Queued"
         DownloadState.RUNNING -> if (rec.size <= 0 && rec.downloaded > 0) "Downloading (size unknown)" else "Downloading"
         DownloadState.PAUSED -> if (!rec.ranged && rec.downloaded > 0) "Paused · resume restarts from 0" else "Paused"
         DownloadState.DONE -> "Done${rec.error?.let { " · ${EngineErrors.userMessage(it)}" } ?: ""}"

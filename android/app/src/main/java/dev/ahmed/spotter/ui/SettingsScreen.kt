@@ -38,12 +38,12 @@ import kotlin.math.roundToInt
 
 private val SPEED_OPTIONS = listOf(
     0L to "Unlimited",
-    64L * 1024 to "64 KB/s",
-    256L * 1024 to "256 KB/s",
-    512L * 1024 to "512 KB/s",
-    1024L * 1024 to "1 MB/s",
-    2L * 1024 * 1024 to "2 MB/s",
-    5L * 1024 * 1024 to "5 MB/s",
+    64L * 1024 to "64 KB",
+    256L * 1024 to "256 KB",
+    512L * 1024 to "512 KB",
+    1024L * 1024 to "1 MB",
+    2L * 1024 * 1024 to "2 MB",
+    5L * 1024 * 1024 to "5 MB",
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -97,7 +97,7 @@ fun SettingsScreen(
                 steps = 14,
                 onChange = { vm.setConnections(it.roundToInt()) },
             )
-            Text("Speed limit", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
+            Text("Speed limit (per second)", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
             ChipRow(
                 options = SPEED_OPTIONS.map { it.second },
                 selected = SPEED_OPTIONS.firstOrNull { it.first == settings.speedLimitBps }?.second ?: "Unlimited",
@@ -195,7 +195,7 @@ fun SettingsScreen(
     if (showLogs) {
         AlertDialog(
             onDismissRequest = { showLogs = false },
-            title = { Text("Logs") },
+            title = { Text("Logs (times are UTC)") },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     Text(logs, style = MaterialTheme.typography.bodySmall)

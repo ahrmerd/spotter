@@ -225,8 +225,17 @@ class HlsDownloader(
                     error = result.note,
                 ),
             )
-            sink.complete()
+            val published = sink
+            published.complete()
             sink = null
+            val real = try {
+                published.finalName()
+            } catch (e: RuntimeException) {
+                ""
+            }
+            if (real.isNotBlank() && real != storedName) {
+                store.get(record.id)?.let { store.update(it.copy(filename = real)) }
+            }
             workDir.deleteRecursively()
             return DownloadOutcome.Completed
         } finally {

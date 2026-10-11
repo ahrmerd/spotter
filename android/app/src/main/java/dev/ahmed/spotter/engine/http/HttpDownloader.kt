@@ -145,6 +145,7 @@ class HttpDownloader(
                 )
                 openSink.complete()
                 sink = null
+                storeFinalName(downloadId, openSink)
                 return@withContext DownloadOutcome.Completed
             }
             DownloadOutcome.Failed(lastRestart ?: "restart failed")
@@ -168,6 +169,18 @@ class HttpDownloader(
                 logger.warn("close sink failed", io)
             }
         }
+    }
+
+    /** After publishing, keep the row's name equal to the file's real name (M5 audit F2). */
+    private suspend fun storeFinalName(downloadId: Long, sink: FileSink) {
+        val real = try {
+            sink.finalName()
+        } catch (e: RuntimeException) {
+            return
+        }
+        if (real.isBlank()) return
+        val rec = store.get(downloadId) ?: return
+        if (rec.filename != real) store.update(rec.copy(filename = real))
     }
 
     private data class Prepared(
