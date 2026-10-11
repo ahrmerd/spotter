@@ -7,6 +7,6 @@
 | M2 Service + Downloads UI | PASS WITH FIXES (A1/A2 code fixed on m3 in fd10906; A1 device re-run and A2 waiting-notification still for auditor) | 2026-10-10 | device re-check |
 | M3 Browser tab + sniffer | PASS WITH FIXES (B1–B5 merged from audit; B6 closed in M4; B7 minor left open) | 2026-10-10 | B7 minor |
 | M4 HLS | PASS WITH FIXES (E1–E6 code fixed on m5 in b270d02; device re-check of remux/name/decode still for auditor) | 2026-10-10 | device re-check |
-| M5 Settings + polish | in audit | 2026-10-10 | |
+| M5 Settings + polish | PASS WITH FIXES (1 blocker F1: choosing a save folder crashes the app on every launch; F2 name mismatch on collisions; F3 remux still drops last frame; see M5-audit.md) | 2026-10-11 | 5 open |
 | M6 Release hardening | not started | | |
 | M7 Site resolvers (optional) | not started | | |
