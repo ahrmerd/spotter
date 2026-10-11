@@ -18,10 +18,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -469,32 +472,78 @@ private fun TabsScreen(
     onNew: () -> Unit,
     onBack: () -> Unit,
 ) {
+    val colors = SpotterTheme.colors
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         SpotterTopBar {
             IconButton(onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-            Text("${tabs.size} tabs", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+            Text(
+                if (tabs.size == 1) "1 tab" else "${tabs.size} tabs",
+                Modifier.weight(1f).padding(start = 4.dp),
+                style = MaterialTheme.typography.titleLarge,
+            )
             IconButton(onNew) { Icon(Icons.Default.Add, "New tab") }
         }
-        LazyColumn(Modifier.weight(1f)) {
-            items(tabs, key = { it.id }) { tab ->
-                Row(
-                    Modifier.fillMaxWidth()
-                        .background(if (tab.id == activeId) SpotterTheme.colors.rowSelected else androidx.compose.ui.graphics.Color.Transparent)
-                        .clickable { onSelect(tab.id) }
-                        .padding(start = 16.dp, top = 8.dp, bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+            columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            gridItems(tabs, key = { it.id }) { tab ->
+                val active = tab.id == activeId
+                val host = AddressBar.hostOf(tab.url)
+                val shape = RoundedCornerShape(14.dp)
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(shape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        .border(if (active) 2.dp else 1.dp, if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, shape)
+                        .clickable { onSelect(tab.id) },
                 ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(tab.title.ifBlank { "New tab" }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 12.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
-                            AddressBar.hostOf(tab.url).ifBlank { "Blank page" },
-                            maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.bodySmall,
+                            tab.title.ifBlank { "New tab" },
+                            Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
+                        IconButton({ onClose(tab.id) }, Modifier.size(36.dp)) {
+                            Icon(Icons.Default.Close, "Close tab", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
-                    IconButton({ onClose(tab.id) }) { Icon(Icons.Default.Close, "Close tab") }
+                    Box(
+                        Modifier.fillMaxWidth().height(110.dp).background(if (active) colors.rowSelected else MaterialTheme.colorScheme.surfaceContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(8.dp)) {
+                            Box(
+                                Modifier.size(44.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MaterialTheme.colorScheme.primary),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    (host.firstOrNull() ?: '+').uppercaseChar().toString(),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                host.ifBlank { "Blank page" },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
-                HorizontalDivider()
             }
         }
     }
