@@ -94,6 +94,7 @@ class ResolvedDownloader(
         if (streams.isEmpty()) return DownloadOutcome.Failed("Nothing to download")
 
         val workDir = File(workRoot, ".res-${initial.id}").apply { mkdirs() }
+        val mergedFile = File(workDir, "merged.mp4")
         val items = plan(streams, workDir)
         val totalBytes = items.sumOf { it.length }
         val kind = runCatching { OptionKind.valueOf(plan.kind) }.getOrDefault(OptionKind.MERGED)
@@ -154,8 +155,8 @@ class ResolvedDownloader(
                         val part = parts[item.index]
                         if (part.complete && item.file.exists() && item.file.length() == item.length) return@withPermit
                         if (item.file.exists()) item.file.delete()
-                        // A stream already joined into its own file (after an interruption) needs no chunks.
-                        if (assembledFile(workDir, item.role).exists()) return@withPermit
+                        // A stream already joined (or the whole merge finished) before an interruption needs no chunks.
+                        if (assembledFile(workDir, item.role).exists() || mergedFile.exists()) return@withPermit
                         val state = streams.getValue(item.role)
                         val seen = refreshGeneration.get()
                         try {
@@ -177,14 +178,21 @@ class ResolvedDownloader(
             }
         }
         partsLock.withLock { persistLocked(force = true) }
-        val complete = parts.indices.count { parts[it].complete || assembledFile(workDir, items[it].role).exists() }
+        val complete = parts.indices.count {
+            parts[it].complete || assembledFile(workDir, items[it].role).exists() || mergedFile.exists()
+        }
         if (complete != items.size) return DownloadOutcome.Failed("incomplete download $complete/${items.size}")
 
-        val video = streams[Role.VIDEO]?.let { assemble(items.filter { i -> i.role == Role.VIDEO }, assembledFile(workDir, Role.VIDEO)) }
-        val audio = streams[Role.AUDIO]?.let { assemble(items.filter { i -> i.role == Role.AUDIO }, assembledFile(workDir, Role.AUDIO)) }
+        val video = if (mergedFile.exists()) null else streams[Role.VIDEO]?.let {
+            assemble(items.filter { i -> i.role == Role.VIDEO }, assembledFile(workDir, Role.VIDEO))
+        }
+        val audio = if (mergedFile.exists()) null else streams[Role.AUDIO]?.let {
+            assemble(items.filter { i -> i.role == Role.AUDIO }, assembledFile(workDir, Role.AUDIO))
+        }
         val output: File = when {
+            kind == OptionKind.MERGED && mergedFile.exists() -> mergedFile
             kind == OptionKind.MERGED && video != null && audio != null -> {
-                val merged = File(workDir, "merged.mp4")
+                val merged = mergedFile
                 if (!merged.exists()) {
                     val tmp = File(workDir, "merged.tmp.mp4")
                     val result = remuxer.remux(video, audio, tmp)

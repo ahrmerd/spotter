@@ -396,7 +396,8 @@ class DownloadManager(
                         allocateName = { suggested -> allocateName(id, suggested) },
                     )
                 }
-                applyOutcome(id, outcome)
+                // Recording the result must survive a pause/cancel that arrives at this very moment.
+                withContext(NonCancellable) { applyOutcome(id, outcome) }
             } catch (e: CancellationException) {
                 val reason = stop.remove(id) ?: StopReason.Kill
                 // The coroutine is already cancelled: store calls (Room uses withContext) would throw straight away and
