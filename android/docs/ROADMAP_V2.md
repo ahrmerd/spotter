@@ -17,13 +17,14 @@ Owner's notes (from the Keep note):
 4. **Ad-block engine:** `adblock-rust` approved (see D for the spike and fallback).
 5. **Incognito:** not needed (removed from A).
 6. **Torrents and magnets:** not needed (E keeps a plain "not supported" message).
+7. **No bottom navigation tabs (Downloads | Browser).** Follow 1DM: the **Downloads page is the home screen** and has no bottom bar. The browser is a separate full-screen mode opened from a **globe icon in the Downloads top bar**; inside the browser, a menu item **"Return to Spotter"** and an **exit (power) button in the browser's bottom bar** (plus the system Back button from the first page) go back to Downloads. (Interpretation: "no tabs" = no bottom navigation tabs. The status tabs ALL / DOWNLOADING / FINISHED stay as filters, as in 1DM. Tell me if you want those gone too.)
 
 ## 1. What the 1DM+ screenshots show (reference, not to be copied pixel for pixel)
 
 | Screen | What 1DM+ does | What we learn |
 |---|---|---|
-| Downloads list | Purple top bar with menu, search, sort, globe (browser), and overflow. Three tabs with live counts: **ALL (1611) / DOWNLOADING (23) / FINISHED (1570)**. Dense rows: file-type icon, long name, "0% / 0.00B / 119.79MB", a one-line status, ETA, a three-dot menu per row. | Counts on tabs are very useful. Rows are compact, one tap target for actions. Colour carries state. |
-| Failed rows | Orange rows: "Access forbidden by server. Please **refresh download link by using Refresh link in browser** or Refresh link option from menu of this download". Several AnimePahe items in this state. | Expired or token-bound links are the normal failure on this kind of site, even for 1DM. We need a first-class **Refresh link** action (reopen the page, re-detect, resume the same download). |
+| **Downloads page (enlarged)** | **No bottom navigation.** One purple top bar: hamburger (drawer), title, **search, sort, globe (opens the browser), a magnet icon, overflow ⋮**. Under it a scrolling row of status tabs with live counts: **ALL (1611) / DOWNLOADING (23) / FINISHED (1570)** and a fourth tab cut off at the edge. Rows: a file-type icon on the left; the file name on top with a **"(Resume: Yes / N/A)"** marker; below it `percent | done / total`; a status line in the middle; the **remaining time or duration on the right** (5s, 2m16s); a three-dot menu on every row. **Whole-row colour shows state**: orange = failed / needs a new link, light grey = completed. One round **+ button** at the bottom right. | The Downloads page is the whole app; the browser hangs off it. A "Resume: Yes/No" marker tells you whether a file can continue after a break (useful for slow sites). Long lists (1600 rows) must stay smooth. |
+| Failed rows (same page) | Orange rows: "Access forbidden by server. Please **refresh download link by using Refresh link in browser** or Refresh link option from menu of this download". Several AnimePahe items in this state. | Expired or token-bound links are the normal failure on this kind of site, even for 1DM. We need a first-class **Refresh link** action (reopen the page, re-detect, resume the same download). |
 | Tabs screen | A list of numbered tabs with favicon, title and an X; a search icon; a bottom bar (power/exit, back, home, forward, +). | Tabs get their own screen. 249 tabs are open, so it must stay fast with many tabs. |
 | Browser menu | New tab, Switch to Incognito, Return to 1DM+, **Remember tabs & Exit**, Exit browser, **Block Ads** (checkbox), **Disable Adblocker on this website** (checkbox), **Capture audio/video** (checkbox), **View Page Resources**, Open in App, Scan QR, Login using external browser, Import cookies, **Clone Tab**, **Grabber**, History, **Open tab for all links available in clipboard**. | The ad-block switch and a per-site exception live in the main menu. "View Page Resources" and "Grabber" are the answer to "not just video". |
 | Address bar | A pill with a lock icon, the URL, and a **tab-count badge** (for example 249); one top row, no crowded icon strip. | Our current address row (7 icons plus a tab strip) is the opposite of this. |
@@ -40,7 +41,8 @@ Owner's notes (from the Keep note):
 ### A. Browser look (owner note 2): milestone M8
 Goal: a calm, modern one-row browser that matches the rest of the app.
 - **Top bar:** one row: `[tab-count badge] [lock + address pill (full width)] [overflow ⋮]`. Progress as a thin line under the pill. The address pill shows the host when not focused and the full URL when focused.
-- **Bottom bar:** back, forward, home, new tab, tabs. It hides on scroll down and returns on scroll up (more room for the page).
+- **App navigation (owner decision 7):** the app opens on the **Downloads page with no bottom navigation bar**. A **globe icon** in the Downloads top bar opens the browser (resuming the last tab). In the browser: **menu > Return to Spotter**, the **exit (power) button** in the browser's bottom bar, and the system Back button on the first page all return to Downloads. The browser remembers its tabs when you leave (and "Remember tabs & exit" is the default behaviour).
+- **Browser bottom bar:** exit (power), back, home, forward, new tab (as in the 1DM tabs screen). It hides on scroll down and returns on scroll up (more room for the page).
 - **Menu (⋮):** New tab, Desktop site, Bookmark, Bookmarks, History, **Block ads** (toggle), **Disable ad-block for this site**, **Page resources**, Clone tab, Share, Settings.
 - **Tabs screen:** a list or a grid with title, favicon, close; "Close all"; "Close others"; search. Must stay usable with 200+ tabs (lazy list, WebViews destroyed when not visible and restored from Room).
 - **Detected media button:** keep the floating chip, restyle it as a filled pill with a count, and pulse once when something new is found.
@@ -90,24 +92,37 @@ This is the biggest item and the one with real technical choices.
 - For HLS, the same swap works when the new playlist has the same segment count and durations; otherwise offer a fresh start.
 - Acceptance: a test server that expires tokens after N seconds; a download is interrupted, refreshed from the page, and completes with the correct hash.
 
-### G. Downloads screen polish: M11
-- **Tabs with counts** (All / Downloading / Finished), type chips under them, sort menu, search kept.
-- **Compact rows**: file-type icon, name (2 lines max), one status line (percent, size, speed, ETA), three-dot menu for actions (pause, resume, cancel, retry, refresh link, rename, share, delete, open folder). State colours (running, paused, error, needs refresh) kept subtle, with an icon as well as colour for accessibility.
-- **Selection mode**: long-press to select, then pause, resume, remove, delete files, share.
-- **Empty states** with a short hint and a "Open browser" button.
-- Acceptance: screenshots light/dark, 1000 rows scroll smoothly, selection actions tested.
+### G. Downloads page (home screen) like 1DM: M8 (layout) and M11 (polish)
+The Downloads page becomes the single home screen (decision 7). Build the **layout in M8 together with the navigation change**, and the rest in M11.
+- **Top bar (coloured):** hamburger (drawer with Settings, Logs, About, later Page resources), title "Spotter", **search**, **sort**, **globe (open browser)**, overflow ⋮ (pause all, resume all, select, settings). No magnet icon (torrents are out of scope).
+- **Status tabs with live counts under the bar:** ALL, DOWNLOADING, FINISHED, and a fourth tab for the failed/needs-link items (1DM shows a fourth, cut off at the edge: we use **ERRORS**). Swipe between them. The type chips (Video, Audio, Image, Document, Archive, Other) move into the sort/filter menu to keep the page clean.
+- **Rows (dense, same information as 1DM):** file-type icon on the left; name (middle-ellipsised, 2 lines at most) with a **"Resume: Yes / N/A"** marker (Yes when the server supports ranges or the stream is HLS); a line `percent | done / total`; status; **ETA or finished duration on the right**; a three-dot menu on every row (pause, resume, cancel, retry, **refresh link**, rename, share, open, delete file, copy link, copy error).
+- **State colours on the whole row**, as in 1DM: orange for failed or needs-new-link (with the short "Refresh link" action in the row, not a long paragraph), light grey for completed, plain for running/queued/paused; always also show an icon and the text so colour is not the only signal.
+- **One round + button** (add link, paste from clipboard, add several links).
+- **Selection mode** (long-press): pause, resume, remove, delete files, share, select all.
+- **Performance:** 1600 rows in the list must scroll smoothly (lazy list, stable keys, progress updates only for visible running rows).
+- **Empty states** with a hint and an "Open browser" button.
+- Acceptance: screenshots light and dark with 5 different row states, 1600 generated rows scroll without jank, selection actions tested, the globe/return round trip keeps both screens' state (scroll position, tabs).
 
 ## 4. Suggested order and size
 
 | Order | Milestone | Content | Size | Needs from the owner |
 |---|---|---|---|---|
-| 1 | M8 | Browser look (closer to 1DM), tabs screen, long-press menu, open in new tab, search engine setting with suggestions (A, B, C) | medium | none |
+| 1 | M8 | **Navigation change** (Downloads home, globe in, Return out, no bottom bar), Downloads page layout, browser look (closer to 1DM), tabs screen, long-press menu, open in new tab, search engine with suggestions (A, B, C, G layout) | large | none |
 | 2 | M9 | Spike for adblock-rust (with fallback matcher), lists, per-site switch, hardening, animepahe test (D) | large | approve installing the Rust toolchain for the spike; test on animepahe.pw |
 | 3 | M10 | Generic file detection, page resources, batch add, Refresh link (E, F) | large | none |
-| 4 | M11 | Downloads screen polish (G) | medium | none |
+| 4 | M11 | Downloads page polish: selection mode, row menus, performance, empty states (G rest) | medium | none |
 | later | M7 | YouTube via NewPipeExtractor (paused) | medium | GPL decision, see the earlier note |
 
 Dependencies: M8 first (the menu and the tab count hold the later toggles). M9 and M10 are independent after M8. F needs E's page-URL storage. G is best last because it displays everything the others add.
+
+## 4b. Bugs found by the owner (fix before or inside M8)
+**BUG-1: the "detected media" sheet does not close after Download.** In the browser, when you open the media list ("N media"), edit the name and tap **Download**, the download is queued but the sheet stays open on top of the page (so it feels like the "alert" is stuck, and tapping Download again queues a duplicate).
+- Root cause (code review, `ui/BrowserScreen.kt` around line 234): the sheet's `onDownload` handler calls `vm.download(...)` and never sets `showDetected = false`. Only the swipe/scrim dismiss closes it. The Add-URL dialog on the Downloads page does close correctly (`showAdd = false`).
+- A second symptom of the same cause: for an HLS playlist the **Quality dialog opens on top of the still-open sheet**, and after you confirm it the sheet is still there.
+- Expected: tapping Download closes the sheet, shows a snackbar "Queued <name>" with a **View** action that goes to Downloads; for HLS the quality dialog appears alone and the sheet is already closed; the same item cannot be queued twice from the same sheet by a double tap.
+- Test: instrumented UI test on a page with one video: tap Download, assert the sheet is gone and exactly one download exists; repeat for an HLS master (quality dialog only) and for a blob entry (button disabled).
+- Owner: a small fix; best done by the builder on the current branch with the M5 audit fixes, or first thing in M8.
 
 ## 5. Constraints that apply to all of it
 - No new library without the owner's approval; this plan asks about one (adblock-rust) and recommends not taking it first.
@@ -119,4 +134,5 @@ Dependencies: M8 first (the menu and the tab count hold the later toggles). M9 a
 Answered: see section 0. Still open:
 1. **Rust toolchain:** may the spike install `rustup`, the three Android targets and `cargo-ndk` on this machine (about 1.5 GB, disk currently about 9 GB free)? Without it we go straight to the fallback matcher.
 2. **Aggressive rules default:** the plan assumes strict rules ON by default with a way to relax them. Confirm or change.
-3. **Real device:** the animepahe.pw tests are best on your phone. When we get there, do you want to run them yourself, or may the auditor use an attached device (only with your say-so each time)?
+3. **"No tabs":** I read this as no bottom navigation tabs (decision 7). Do you also want the ALL / DOWNLOADING / FINISHED status tabs removed (leaving a single list with a filter menu), or kept like 1DM?
+4. **Real device:** the animepahe.pw tests are best on your phone. When we get there, do you want to run them yourself, or may the auditor use an attached device (only with your say-so each time)?
