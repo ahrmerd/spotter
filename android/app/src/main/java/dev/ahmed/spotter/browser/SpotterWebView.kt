@@ -34,7 +34,7 @@ class WebViewCallbacks(
     val onNewWindow: (userGesture: Boolean, tapOnLink: Boolean, attach: (WebView) -> Unit) -> Boolean,
     /** Ad blocker hooks; the defaults let everything through. */
     val shouldBlockRequest: (tabId: Long, url: String, accept: String?) -> Boolean = { _, _, _ -> false },
-    val shouldBlockNavigation: (tabId: Long, url: String, hasGesture: Boolean) -> Boolean = { _, _, _ -> false },
+    val shouldBlockNavigation: (tabId: Long, url: String, tapOnLink: Boolean) -> Boolean = { _, _, _ -> false },
     val pageScript: (tabId: Long, url: String) -> String? = { _, _ -> null },
 )
 
@@ -160,6 +160,12 @@ class SpotterBridge(
     }
 }
 
+/** Did the user's last touch land on a link (or an image that is a link)? */
+internal fun isLinkTap(view: WebView): Boolean {
+    val t = view.hitTestResult.type
+    return t == WebView.HitTestResult.SRC_ANCHOR_TYPE || t == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
+}
+
 private class SpotterWebViewClient(
     private val ref: TabRef,
     private val callbacks: WebViewCallbacks,
@@ -168,7 +174,7 @@ private class SpotterWebViewClient(
         val url = request.url?.toString() ?: return true
         val tabId = ref.id.get()
         if (PopupRules.blockHost(url, callbacks.typedUrl(tabId))) return true
-        if (callbacks.shouldBlockNavigation(tabId, url, request.hasGesture())) return true
+        if (callbacks.shouldBlockNavigation(tabId, url, request.hasGesture() && isLinkTap(view))) return true
         val scheme = request.url.scheme?.lowercase()
         if (scheme != "http" && scheme != "https") return true
         return false

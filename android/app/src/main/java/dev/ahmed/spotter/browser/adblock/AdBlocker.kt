@@ -63,8 +63,12 @@ class AdBlocker(
     /** The user typed or tapped a link: what happens in the next moments is allowed to leave the site. */
     fun noteUserNavigation(tabId: Long) { lastUserNav[tabId] = clock() }
 
-    /** A main-frame navigation the page started (link tap, script, redirect). Typed addresses never get here. */
-    fun navigationBlocked(tabId: Long, url: String, hasGesture: Boolean, pageUrl: String): Boolean {
+    /**
+     * A main-frame navigation the page started (link tap, script, redirect). Typed addresses never get here.
+     * [tapOnLink] is true only for a fresh user tap that landed on a real link. On animepahe.pw the first tap on the
+     * player carries a user gesture but lands on a script handler, and that tap sent the tab to an ad network.
+     */
+    fun navigationBlocked(tabId: Long, url: String, tapOnLink: Boolean, pageUrl: String): Boolean {
         if (!enabledFor(pageUrl)) return false
         val target = hostOf(url)
         val here = hostOf(pageUrl)
@@ -72,7 +76,7 @@ class AdBlocker(
         if (e != null && !isMedia(url) && e.shouldBlock(url, target, FilterEngine.DOCUMENT or FilterEngine.POPUP, here)) {
             count(tabId); return true
         }
-        if (hasGesture) {
+        if (tapOnLink) {
             noteUserNavigation(tabId)
             return false
         }

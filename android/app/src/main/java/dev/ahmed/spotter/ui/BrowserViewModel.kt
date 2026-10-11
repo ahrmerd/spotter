@@ -229,8 +229,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         shouldBlockRequest = { tabId, url, accept ->
             app.adBlocker.requestBlocked(tabId, url, AdBlocker.typeOf(url, accept, false), pageMeta[tabId]?.first.orEmpty())
         },
-        shouldBlockNavigation = { tabId, url, gesture ->
-            app.adBlocker.navigationBlocked(tabId, url, gesture, pageMeta[tabId]?.first.orEmpty())
+        shouldBlockNavigation = { tabId, url, tapOnLink ->
+            app.adBlocker.navigationBlocked(tabId, url, tapOnLink, pageMeta[tabId]?.first.orEmpty())
         },
         pageScript = { tabId, url -> app.adBlocker.pageScript(url.ifBlank { pageMeta[tabId]?.first.orEmpty() }) },
         onNewWindow = { userGesture, tapOnLink, attach ->
