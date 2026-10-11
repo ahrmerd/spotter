@@ -50,6 +50,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setResumeOnBoot(value: Boolean) = update { it.copy(resumeOnBoot = value) }
     fun setDefaultHlsQuality(value: String) = update { it.copy(defaultHlsQuality = value) }
     fun setNotifications(value: Boolean) = update { it.copy(notificationsEnabled = value) }
+    fun setSearchEngine(value: String) = update { it.copy(searchEngine = value) }
+    fun setCustomSearchUrl(value: String) = update { it.copy(customSearchUrl = value.trim()) }
+    fun setSearchSuggestions(value: Boolean) = update { it.copy(searchSuggestions = value) }
     fun setTheme(value: String) = update { it.copy(theme = value) }
     fun markBatteryPromptDone() = update { it.copy(batteryPromptDone = true) }
 

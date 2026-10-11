@@ -12,6 +12,9 @@ data class EngineSettings(
     val theme: String = THEME_SYSTEM,
     val saveFolderUri: String = "",
     val batteryPromptDone: Boolean = false,
+    val searchEngine: String = "google",
+    val customSearchUrl: String = "",
+    val searchSuggestions: Boolean = true,
 ) {
     companion object {
         const val DEFAULT_MAX_CONCURRENT = 3
@@ -36,6 +39,9 @@ data class EngineSettings(
         const val KEY_THEME = "theme"
         const val KEY_SAVE_FOLDER_URI = "save_folder_uri"
         const val KEY_BATTERY_PROMPT_DONE = "battery_prompt_done"
+        const val KEY_SEARCH_ENGINE = "search_engine"
+        const val KEY_CUSTOM_SEARCH_URL = "custom_search_url"
+        const val KEY_SEARCH_SUGGESTIONS = "search_suggestions"
 
         val HLS_QUALITY_OPTIONS = listOf(QUALITY_BEST, "1080", "720", "480", "360")
         val THEME_OPTIONS = listOf(THEME_SYSTEM, THEME_LIGHT, THEME_DARK)
@@ -52,6 +58,9 @@ data class EngineSettings(
             theme = rows[KEY_THEME]?.takeIf { it in THEME_OPTIONS } ?: THEME_SYSTEM,
             saveFolderUri = rows[KEY_SAVE_FOLDER_URI].orEmpty(),
             batteryPromptDone = rows[KEY_BATTERY_PROMPT_DONE]?.toBooleanStrictOrNull() ?: false,
+            searchEngine = rows[KEY_SEARCH_ENGINE]?.ifBlank { null } ?: "google",
+            customSearchUrl = rows[KEY_CUSTOM_SEARCH_URL].orEmpty(),
+            searchSuggestions = rows[KEY_SEARCH_SUGGESTIONS]?.toBooleanStrictOrNull() ?: true,
         )
     }
 
@@ -72,5 +81,8 @@ data class EngineSettings(
         KEY_THEME to (theme.takeIf { it in THEME_OPTIONS } ?: THEME_SYSTEM),
         KEY_SAVE_FOLDER_URI to saveFolderUri,
         KEY_BATTERY_PROMPT_DONE to batteryPromptDone.toString(),
+        KEY_SEARCH_ENGINE to searchEngine,
+        KEY_CUSTOM_SEARCH_URL to customSearchUrl,
+        KEY_SEARCH_SUGGESTIONS to searchSuggestions.toString(),
     )
 }

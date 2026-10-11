@@ -7,6 +7,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -50,6 +52,9 @@ import dev.ahmed.spotter.ui.DownloadsViewModel
 import dev.ahmed.spotter.ui.SettingsScreen
 import dev.ahmed.spotter.ui.SettingsViewModel
 import dev.ahmed.spotter.ui.ShareUrls
+import dev.ahmed.spotter.ui.theme.SpotterTheme
+
+enum class Screen { Downloads, Browser, Settings }
 
 class MainActivity : ComponentActivity() {
     private val downloadsVm: DownloadsViewModel by viewModels()
@@ -73,6 +78,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Draw behind the bars; the coloured top bar sits under the status bar, so its icons stay light.
+        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         batteryIgnoring = BatteryPrompt.isIgnoring(this)
         if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
             WebView.setWebContentsDebuggingEnabled(true)
@@ -81,7 +88,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val settings by settingsVm.settings.collectAsStateWithLifecycle()
             SpotterTheme(settings.theme) {
-                var tab by rememberSaveable { mutableIntStateOf(0) }
+                var screen by rememberSaveable { mutableStateOf(Screen.Downloads) }
                 var showBattery by rememberSaveable { mutableStateOf(false) }
                 LaunchedEffect(settings.batteryPromptDone, settings.notificationsEnabled) {
                     batteryIgnoring = BatteryPrompt.isIgnoring(this@MainActivity)
@@ -91,48 +98,33 @@ class MainActivity : ComponentActivity() {
                     if (settings.notificationsEnabled) requestNotifyPermission()
                 }
                 dev.ahmed.spotter.ui.ResolveDialogHost((application as SpotterApp).resolve)
-                Scaffold(bottomBar = {
-                    NavigationBar {
-                        NavigationBarItem(
-                            selected = tab == 0,
-                            onClick = { tab = 0 },
-                            icon = { Icon(Icons.Default.Download, null) },
-                            label = { Text("Downloads") },
-                        )
-                        NavigationBarItem(
-                            selected = tab == 1,
-                            onClick = { tab = 1 },
-                            icon = { Icon(Icons.Default.Public, null) },
-                            label = { Text("Browser") },
-                        )
-                        NavigationBarItem(
-                            selected = tab == 2,
-                            onClick = { tab = 2 },
-                            icon = { Icon(Icons.Default.Settings, null) },
-                            label = { Text("Settings") },
-                        )
-                    }
-                }) { pad ->
-                    Box(Modifier.fillMaxSize().padding(pad)) {
-                        when (tab) {
-                            0 -> DownloadsScreen(
-                                vm = downloadsVm,
-                                shareUrl = shareUrl,
-                                clipboardUrl = clipboardUrl,
-                                onShareConsumed = { shareUrl = null },
-                                onClipboardConsumed = { clipboardUrl = null },
-                            )
-                            1 -> BrowserScreen(vm = browserVm, holder = browserHolder)
-                            else -> SettingsScreen(
-                                vm = settingsVm,
-                                batteryIgnoring = batteryIgnoring,
-                                onPickFolder = { folderPicker.launch(null) },
-                                onBattery = { showBatteryPrompt() },
-                                onExportLogs = { exportLogs() },
-                                onRequestNotifications = { requestNotifyPermission() },
-                            )
-                        }
-                    }
+                // Downloads is the home screen; the browser and Settings are full screens reached from it (no bottom bar).
+                androidx.activity.compose.BackHandler(enabled = screen == Screen.Settings) { screen = Screen.Downloads }
+                when (screen) {
+                    Screen.Downloads -> DownloadsScreen(
+                        vm = downloadsVm,
+                        shareUrl = shareUrl,
+                        clipboardUrl = clipboardUrl,
+                        onShareConsumed = { shareUrl = null },
+                        onClipboardConsumed = { clipboardUrl = null },
+                        onOpenBrowser = { screen = Screen.Browser },
+                        onOpenSettings = { screen = Screen.Settings },
+                    )
+                    // The browser handles its own Back (page history, tabs screen, then back to Downloads).
+                    Screen.Browser -> BrowserScreen(
+                        vm = browserVm,
+                        holder = browserHolder,
+                        onExit = { screen = Screen.Downloads },
+                    )
+                    Screen.Settings -> SettingsScreen(
+                        vm = settingsVm,
+                        batteryIgnoring = batteryIgnoring,
+                        onBack = { screen = Screen.Downloads },
+                        onPickFolder = { folderPicker.launch(null) },
+                        onBattery = { showBatteryPrompt() },
+                        onExportLogs = { exportLogs() },
+                        onRequestNotifications = { requestNotifyPermission() },
+                    )
                 }
                 if (showBattery) {
                     AlertDialog(
@@ -239,18 +231,4 @@ class MainActivity : ComponentActivity() {
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         startActivity(Intent.createChooser(send, "Export logs"))
     }
-}
-
-@Composable
-private fun SpotterTheme(theme: String, content: @Composable () -> Unit) {
-    val systemDark = isSystemInDarkTheme()
-    val dark = when (theme) {
-        EngineSettings.THEME_LIGHT -> false
-        EngineSettings.THEME_DARK -> true
-        else -> systemDark
-    }
-    MaterialTheme(
-        colorScheme = if (dark) darkColorScheme() else lightColorScheme(),
-        content = content,
-    )
 }

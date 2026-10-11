@@ -8,6 +8,8 @@ import dev.ahmed.spotter.SpotterApp
 import dev.ahmed.spotter.engine.Categories
 import dev.ahmed.spotter.engine.ErrorRedact
 import dev.ahmed.spotter.engine.model.DownloadRecord
+import dev.ahmed.spotter.engine.model.DownloadState
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -33,6 +35,11 @@ class DownloadsViewModel(application: Application) : AndroidViewModel(applicatio
     val userMessage = MutableStateFlow<String?>(null)
 
     private val lastBytes = HashMap<Long, Pair<Long, Long>>()
+
+    /** Every download, unfiltered: used for the counts on the status tabs and for bulk actions. */
+    val all: StateFlow<List<DownloadUi>> = app.store.observeAll()
+        .map { records -> records.map { DownloadUi(it, 0, null, Categories.of(it.mimeType, it.filename)) } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val items: StateFlow<List<DownloadUi>> = combine(
         app.store.observeAll(),
@@ -75,6 +82,8 @@ class DownloadsViewModel(application: Application) : AndroidViewModel(applicatio
     fun deleteFile(id: Long) = launch { manager.deleteDownloadedFile(id) }
     fun rename(id: Long, name: String) = launch { manager.rename(id, name) }
     fun pauseAll() = launch { manager.pauseAll() }
+    fun resumeAll() = launch { all.value.filter { it.record.state == DownloadState.PAUSED }.forEach { manager.resume(it.record.id) } }
+    fun clearFinished() = launch { all.value.filter { it.record.state == DownloadState.DONE }.forEach { manager.remove(it.record.id, false) } }
 
     fun setWifiOnly(value: Boolean) = launch {
         app.applySettings(app.store.loadSettings().copy(wifiOnly = value))

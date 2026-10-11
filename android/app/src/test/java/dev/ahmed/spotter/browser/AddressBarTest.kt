@@ -18,7 +18,7 @@ class AddressBarTest {
     @Test
     fun wordsGoToSearch() {
         val url = AddressBar.resolve("cute otters")
-        assertTrue(url.startsWith("https://duckduckgo.com/?q="))
+        assertTrue(url.startsWith("https://www.google.com/search?q="))
         assertTrue(url.contains("cute"))
     }
 }

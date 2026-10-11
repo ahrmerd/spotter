@@ -12,7 +12,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -32,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.ahmed.spotter.browser.SearchEngine
 import dev.ahmed.spotter.engine.model.EngineSettings
 import dev.ahmed.spotter.service.BatteryPrompt
 import kotlin.math.roundToInt
@@ -51,6 +56,7 @@ private val SPEED_OPTIONS = listOf(
 fun SettingsScreen(
     vm: SettingsViewModel,
     batteryIgnoring: Boolean,
+    onBack: () -> Unit,
     onPickFolder: () -> Unit,
     onBattery: () -> Unit,
     onExportLogs: () -> Unit,
@@ -70,7 +76,13 @@ fun SettingsScreen(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Settings") }) },
+        topBar = {
+            dev.ahmed.spotter.ui.components.SpotterTopBar {
+                IconButton(onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                Text("Settings", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 4.dp))
+            }
+        },
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
         snackbarHost = { SnackbarHost(snackbar) },
     ) { pad ->
         Column(
@@ -118,6 +130,32 @@ fun SettingsScreen(
                         ?: EngineSettings.QUALITY_BEST
                     vm.setDefaultHlsQuality(key)
                 },
+            )
+
+            Section("Search")
+            Text("Search engine", style = MaterialTheme.typography.titleSmall)
+            ChipRow(
+                options = SearchEngine.entries.map { it.label },
+                selected = SearchEngine.byId(settings.searchEngine).label,
+                onPick = { label ->
+                    SearchEngine.entries.firstOrNull { it.label == label }?.let { vm.setSearchEngine(it.id) }
+                },
+            )
+            if (settings.searchEngine == SearchEngine.CUSTOM.id) {
+                var custom by remember(settings.customSearchUrl) { mutableStateOf(settings.customSearchUrl) }
+                androidx.compose.material3.OutlinedTextField(
+                    value = custom,
+                    onValueChange = { custom = it; vm.setCustomSearchUrl(it) },
+                    label = { Text("Search URL (use %s for the query)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            SwitchRow("Search suggestions", settings.searchSuggestions) { vm.setSearchSuggestions(it) }
+            Text(
+                "While you type, the text is sent to the search engine to get suggestions. Links are never sent.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             Section("Appearance")

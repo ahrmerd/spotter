@@ -244,7 +244,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun submitAddress(raw: String, holder: WebViewHolder) {
-        val url = AddressBar.resolve(raw)
+        val cfg = app.settingsSnap
+        val url = AddressBar.resolve(raw, cfg.searchEngine, cfg.customSearchUrl)
         if (url.isBlank()) return
         val tabId = activeTabId.value
         typedUrl[tabId] = url
@@ -268,6 +269,49 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         progress.value = 100
         loading.value = false
         viewModelScope.launch { store.setActiveTabId(id) }
+    }
+
+    /** Suggestions for the address bar text; empty when disabled or the text looks like a URL. */
+    val suggestions = MutableStateFlow<List<String>>(emptyList())
+    private var suggestJob: kotlinx.coroutines.Job? = null
+    private val suggestionClient by lazy { dev.ahmed.spotter.browser.SuggestionClient(app.httpClient) }
+
+    fun typing(text: String) {
+        suggestJob?.cancel()
+        val cfg = app.settingsSnap
+        if (!cfg.searchSuggestions || !dev.ahmed.spotter.browser.SearchSuggestions.shouldSuggest(text)) {
+            suggestions.value = emptyList()
+            return
+        }
+        suggestJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(250)
+            suggestions.value = try {
+                withContext(Dispatchers.IO) { suggestionClient.fetch(cfg.searchEngine, text) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+    }
+
+    fun clearSuggestions() {
+        suggestJob?.cancel()
+        suggestions.value = emptyList()
+    }
+
+    /** Opens [url] in a new tab and switches to it. */
+    fun openInNewTab(url: String) {
+        viewModelScope.launch {
+            val tab = store.addTab(url = url)
+            typedUrl[tab.id] = url
+            activeTabId.value = tab.id
+            address.value = url
+            canBack.value = false
+            canForward.value = false
+            detectedTick.value += 1
+            store.setActiveTabId(tab.id)
+        }
     }
 
     fun newTab() {
