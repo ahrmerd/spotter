@@ -17,17 +17,17 @@
  ],
  "extras": [
   {
-   "name": "Spotter-desktop-0.5.0.zip",
-   "size": 288653
+   "name": "Spotter-desktop-0.5.1.zip",
+   "size": 290020
   },
   {
-   "name": "Spotter-extension-chrome-0.5.0.zip",
-   "size": 263068
+   "name": "Spotter-extension-chrome-0.5.1.zip",
+   "size": 263799
   },
   {
-   "name": "Spotter-extension-firefox-0.5.0.zip",
-   "size": 263099
+   "name": "Spotter-extension-firefox-0.5.1.zip",
+   "size": 263816
   }
  ],
- "extrasVersion": "0.5.0"
+ "extrasVersion": "0.5.1"
 }

@@ -23,6 +23,12 @@ def unique_path(directory, name):
     return path
 
 
+MANIFEST_TYPES = {
+    "application/dash+xml", "video/vnd.mpeg.dash.mpd",
+    "application/vnd.apple.mpegurl", "application/x-mpegurl", "audio/mpegurl", "audio/x-mpegurl",
+}
+
+
 def kind_of(url):
     path = urllib.parse.urlparse(url).path.lower()
     if path.endswith((".m3u8", ".mpd")):
@@ -48,6 +54,7 @@ class CurlProxy:
     """
     def __init__(self):
         self.jobs = {}  # download id -> headers
+        self.manifests = {}  # download id -> repaired DASH manifest text
         proxy = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -55,6 +62,15 @@ class CurlProxy:
                 pass
 
             def do_GET(self):
+                m = re.fullmatch(r"/m/(\d+)/m\.mpd", urllib.parse.urlparse(self.path).path)
+                if m and int(m.group(1)) in proxy.manifests:
+                    body = proxy.manifests[int(m.group(1))].encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/dash+xml")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
                 try:
                     q = urllib.parse.urlparse(self.path)
                     id = int(q.path.split("/")[2])
@@ -132,6 +148,7 @@ class Download:
     def __init__(self, id, url, headers, directory, filename=None):
         self.id, self.url, self.headers = id, url, headers or {}
         self.kind = kind_of(url)
+        self.mpd = urllib.parse.urlparse(url).path.lower().endswith(".mpd")
         self.directory = directory
         self.filename = filename
         self.path = None
@@ -273,6 +290,11 @@ class Manager:
         if not it.parts:
             # probe: size, range support, filename
             r = self._req(it, {"Range": "bytes=0-0"})
+            # A manifest (DASH .mpd or HLS .m3u8 served from a URL with no extension) is not the video: hand it to ffmpeg.
+            ctype = r.headers.get_content_type()
+            if ctype in MANIFEST_TYPES:
+                it.kind, it.mpd = "hls", "dash" in ctype or ctype.endswith("mpd")
+                return self._hls(it)
             cr = r.headers.get("Content-Range")
             ranged = r.status == 206 and cr
             size = int(cr.split("/")[-1]) if ranged and cr.split("/")[-1].isdigit() else int(r.headers.get("Content-Length") or 0)
@@ -363,7 +385,19 @@ class Manager:
             it.path = unique_path(self.dir, safe_name(base) + ".mp4")
         it.filename = os.path.basename(it.path)
         ua = next((v for k, v in it.headers.items() if k.lower() == "user-agent"), UA)
-        if self.proxy:
+        if getattr(it, "mpd", False):
+            # Fetch the manifest ourselves: some are served with bare "&" in their signed segment URLs, which is not
+            # valid XML and makes ffmpeg refuse the whole file. Repair it and give ffmpeg a local copy.
+            with self._req(it) as r:
+                text = r.read().decode("utf-8", "replace")
+            text = re.sub(r"&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)", "&amp;", text)
+            if not self.proxy:
+                raise RuntimeError("curl is needed for DASH downloads")
+            self.proxy.manifests[it.id] = text
+            hdr = "".join(f"{k}: {v}\r\n" for k, v in it.headers.items() if k.lower() not in ("range", "host", "user-agent"))
+            src = f"http://127.0.0.1:{self.proxy.port}/m/{it.id}/m.mpd"
+            extra = ["-user_agent", ua, "-headers", hdr]
+        elif self.proxy:
             src, extra = self.proxy.url_for(it.id, it.url, it.headers), ["-allowed_extensions", "ALL"]
         else:
             hdr = "".join(f"{k}: {v}\r\n" for k, v in it.headers.items() if k.lower() not in ("range", "host", "user-agent"))
@@ -379,6 +413,8 @@ class Manager:
             time.sleep(0.5)
         err = it.proc.stderr.read()
         rc, it.proc = it.proc.returncode, None
+        if self.proxy:
+            self.proxy.manifests.pop(it.id, None)
         if it.cancel.is_set():
             return
         if rc:
