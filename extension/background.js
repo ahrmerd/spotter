@@ -66,16 +66,25 @@ async function send(item) {
     const cookies = await chrome.cookies?.getAll({url: item.url});
     if (cookies?.length) headers["Cookie"] = cookies.map(c => `${c.name}=${c.value}`).join("; ");
   } catch {}
-  const r = await fetch(API + "/api/add", {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({url: item.url, headers, filename: item.filename}),
-  });
-  if (!r.ok) throw new Error("manager returned " + r.status);
+  try {
+    const r = await fetch(API + "/api/add", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({url: item.url, headers, filename: item.filename}),
+    });
+    if (!r.ok) throw new Error("manager returned " + r.status);
+    return "manager";
+  } catch (e) {
+    // Manager not running: plain files can still go through the browser's own downloader.
+    const plain = /^https?:/i.test(item.url) && !item.type?.startsWith("page") && !/m3u8|mpd|mpegurl|dash/i.test((item.type || "") + item.url);
+    if (!plain || !chrome.downloads) throw e;
+    await chrome.downloads.download({url: item.url, filename: item.filename || undefined});
+    return "browser";
+  }
 }
 
 chrome.runtime.onMessage.addListener((msg, _s, reply) => {
   if (msg.type === "list") ready.then(() => reply(Object.values(found[msg.tabId] || {})));
-  else if (msg.type === "download") send(msg.item).then(() => reply({ok: true}), e => reply({error: String(e)}));
+  else if (msg.type === "download") send(msg.item).then(via => reply({ok: true, via}), e => reply({error: String(e)}));
   return true;
 });
 

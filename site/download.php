@@ -5,6 +5,7 @@ $rel = json_decode(file_get_contents(__DIR__ . '/releases.json'), true);
 $name = basename($_GET['f'] ?? '');
 $ok = false;
 foreach ($rel['releases'] ?? [] as $r) foreach ($r['files'] as $f) if ($f['name'] === $name) $ok = true;
+foreach ($rel['extras'] ?? [] as $f) if ($f['name'] === $name) $ok = true;
 $path = __DIR__ . '/files/' . $name;
 if (!$ok || !is_file($path)) { http_response_code(404); echo 'Not found'; exit; }
 db()->prepare('INSERT INTO downloads (day, file, n) VALUES (?,?,1) ON CONFLICT(day,file) DO UPDATE SET n=n+1')

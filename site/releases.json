@@ -1,0 +1,33 @@
+{
+ "releases": [
+  {
+   "version": "0.2.0",
+   "date": "2026-10-11",
+   "files": [
+    {
+     "name": "Spotter-0.2.0.apk",
+     "size": 3834265
+    },
+    {
+     "name": "spotter-source-0.2.0.zip",
+     "size": 3185605
+    }
+   ]
+  }
+ ],
+ "extras": [
+  {
+   "name": "Spotter-desktop-0.5.0.zip",
+   "size": 288365
+  },
+  {
+   "name": "Spotter-extension-chrome-0.5.0.zip",
+   "size": 263068
+  },
+  {
+   "name": "Spotter-extension-firefox-0.5.0.zip",
+   "size": 263099
+  }
+ ],
+ "extrasVersion": "0.5.0"
+}

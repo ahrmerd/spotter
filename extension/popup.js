@@ -38,7 +38,7 @@ const nameOf = u => { try { return decodeURIComponent(new URL(u).pathname.split(
     btn.onclick = async () => {
       btn.disabled = true;
       const r = await chrome.runtime.sendMessage({type: "download", item: {...it, filename: b.value.trim() ? b.value.trim() + ext : undefined}});
-      btn.textContent = r?.ok ? "Added ✓" : "Manager offline";
+      btn.textContent = r?.ok ? (r.via === "browser" ? "Saving in browser ✓" : "Added ✓") : "Needs the desktop manager";
       if (!r?.ok) btn.disabled = false;
     };
     row.append(n, btn); l.append(row);

@@ -38,6 +38,14 @@ table{width:100%;border-collapse:collapse}td{padding:6px 0;border-bottom:1px sol
   <li><b>Play Protect says the app is blocked or unsafe:</b> tap <b>More details</b>, then <b>Install anyway</b>.</li>
   <li><b>No such button:</b> open the Play Store → your profile → Play Protect → ⚙ and turn off "Scan apps with Play Protect" until the install is done, then turn it back on.</li>
   <li><b>"App not installed":</b> an older Spotter signed with a different key is on the phone. Uninstall it first, then install again.</li></ul></div>
+<div class="card" id="desk"><h2>On your computer: ad blocker for Chrome, Edge, Brave and Firefox</h2>
+  <p>Blocks ads and pop-ups, spots videos on the page and saves them. Switch it on or off from the toolbar icon, for all sites or just the one you are on.</p>
+  <a id="deskDl" class="btn" href="#" style="font-size:16px">Download for computer</a>
+  <p class="mut" id="deskVer"></p>
+  <ul><li>Unzip the file. Open <b>chrome://extensions</b> (Edge: edge://extensions), turn on <b>Developer mode</b>, click <b>Load unpacked</b> and pick the <b>extension</b> folder. Keep that folder.</li>
+  <li>Firefox: <b>about:debugging</b> → This Firefox → Load Temporary Add-on → <b>extension/manifest.firefox.json</b> (repeat after restarting Firefox).</li>
+  <li>Plain video files download through the browser. For streams (.m3u8) and YouTube, start the little download manager: double-click <b>start-spotter.bat</b> (Windows) or run <b>start-spotter.sh</b>. It needs Python 3.</li></ul>
+  <p class="mut">Only the extension: <a id="chr" href="#">Chrome/Edge zip</a> · <a id="ffx" href="#">Firefox zip</a>. Details are in README.txt inside the zip.</p></div>
 <div class="card"><h2>All versions</h2><table id="all"></table></div>
 <div class="card"><h2>Privacy</h2>
   <p>Once a day the app sends this site a random install ID, the app version, the Android version and the CPU type, so the author can count how many devices use it. No IP address is stored, and nothing about your downloads, browsing, files, name or device identity is sent. You can switch it off in Spotter → Settings → Privacy. Apart from that, the app talks only to the sites you visit or download from, and to your search engine when you type in the address bar (switchable).</p>
@@ -55,6 +63,9 @@ fetch('releases.json',{cache:'no-store'}).then(r=>r.json()).then(d=>{
   if(src) document.getElementById('src').href='download.php?f='+encodeURIComponent(src.name);
   document.getElementById('all').innerHTML=d.releases.map(r=>{const a=r.files.find(f=>f.name.endsWith('.apk'));
     return '<tr><td>'+r.version+'</td><td class="mut">'+r.date+'</td><td style="text-align:right"><a href="download.php?f='+encodeURIComponent(a.name)+'">APK ('+mb(a.size)+')</a></td></tr>'}).join('');
+  const ex=d.extras||[], link=(el,f)=>{if(f)document.getElementById(el).href='download.php?f='+encodeURIComponent(f.name)};
+  link('deskDl',ex.find(f=>/desktop/.test(f.name))); link('chr',ex.find(f=>/chrome/.test(f.name))); link('ffx',ex.find(f=>/firefox/.test(f.name)));
+  const dz=ex.find(f=>/desktop/.test(f.name)); if(dz) document.getElementById('deskVer').textContent='Version '+d.extrasVersion+' · '+mb(dz.size);
   const ua=navigator.userAgent, w=document.getElementById('warn'), m=ua.match(/Android (\d+)/);
   if(!/Android/.test(ua)){w.style.display='block';w.textContent='Spotter is an Android app. Open this page on your Android phone to install it.';}
   else if(m && +m[1]<8){w.style.display='block';w.textContent='Your Android version ('+m[1]+') is too old. Spotter needs Android 8 or newer.';}
