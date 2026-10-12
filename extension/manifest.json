@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Spotter",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Detects videos on the page, sends them to the local download manager, and blocks ads and pop-ups.",
   "permissions": [
     "contextMenus",
@@ -43,7 +43,9 @@
       ],
       "run_at": "document_start",
       "all_frames": true,
-      "world": "MAIN"
+      "world": "MAIN",
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
     },
     {
       "matches": [
@@ -54,7 +56,9 @@
         "adblock-state.js"
       ],
       "run_at": "document_start",
-      "all_frames": true
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
     }
   ]
 }

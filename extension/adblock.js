@@ -19,6 +19,21 @@
   addEventListener('keydown', (e) => { if (e.isTrusted && e.key === 'Enter') lastLinkTap = Date.now(); }, true);
   const recentLinkTap = () => Date.now() - lastLinkTap < 1500;
 
+  // Ad scripts also open tabs by "clicking" a hidden <a target=_blank> from code. A real tap is trusted; this is not.
+  const killFakeClick = (e) => {
+    if (e.isTrusted || !enabled()) return;
+    const a = e.target && e.target.closest && e.target.closest('a[href]');
+    if (a && (a.target === '_blank' || a.target === '_new' || (a.href && new URL(a.href, location.href).origin !== location.origin))) {
+      e.preventDefault(); e.stopImmediatePropagation();
+      console.debug('[spotter-adblock] blocked scripted link click', a.href);
+    }
+  };
+  addEventListener('click', killFakeClick, true);
+  document.addEventListener('submit', (e) => {
+    const f = e.target;
+    if (enabled() && f && f.target === '_blank' && !e.isTrusted) { e.preventDefault(); e.stopImmediatePropagation(); }
+  }, true);
+
   // window.open is allowed only right after a real tap on a link.
   const realOpen = window.open;
   window.open = function (url, ...rest) {

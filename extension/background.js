@@ -113,3 +113,37 @@ chrome.storage.onChanged.addListener((c, area) => { if (area === "local" && (c.a
 chrome.runtime.onInstalled.addListener(applyAdblock);
 chrome.runtime.onStartup.addListener(applyAdblock);
 applyAdblock().catch(() => {});
+
+
+// ---- Close ad pop-up tabs ----
+// A tab opened by a page whose first address is an ad host is closed at once instead of being left open as an empty
+// "blocked" page. Hosts come from the same list as the network rules.
+let adHosts = null;
+async function loadAdHosts() {
+  try {
+    const rules = await (await fetch(chrome.runtime.getURL("rules/ads.json"))).json();
+    adHosts = new Set(rules.flatMap(r => r.condition.requestDomains || []));
+  } catch { adHosts = new Set(); }
+}
+const hostIsAd = host => {
+  for (let h = host; h.includes(".") || h; h = h.slice(h.indexOf(".") + 1)) {
+    if (adHosts.has(h)) return true;
+    if (!h.includes(".")) break;
+  }
+  return false;
+};
+async function maybeClosePopup(tab) {
+  if (!tab || tab.openerTabId == null || !(tab.pendingUrl || tab.url)) return;
+  const s = await chrome.storage.local.get(["adblock", "adblockOff"]);
+  if (s.adblock === false) return;
+  let host; try { host = new URL(tab.pendingUrl || tab.url).hostname; } catch { return; }
+  try {
+    const opener = await chrome.tabs.get(tab.openerTabId);
+    const oh = new URL(opener.url).hostname;
+    if ((s.adblockOff || []).some(h => oh === h || oh.endsWith("." + h))) return;
+  } catch {}
+  if (!adHosts) await loadAdHosts();
+  if (hostIsAd(host)) chrome.tabs.remove(tab.id).catch(() => {});
+}
+chrome.tabs.onCreated.addListener(maybeClosePopup);
+chrome.tabs.onUpdated.addListener((id, info, tab) => { if (info.url) maybeClosePopup(tab); });
