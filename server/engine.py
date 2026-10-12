@@ -32,6 +32,14 @@ def kind_of(url):
     return "http"
 
 
+def ts_offset(buf: bytes) -> int:
+    """Index of the first MPEG-TS packet run (0x47 every 188 bytes, four in a row) in buf, or 0 if there is none."""
+    for i in range(0, max(0, len(buf) - 564)):
+        if buf[i] == 0x47 and buf[i + 188] == 0x47 and buf[i + 376] == 0x47 and buf[i + 564] == 0x47:
+            return i
+    return 0
+
+
 class CurlProxy:
     """Local HTTP proxy that fetches through curl (HTTP/2, browser headers).
 
@@ -75,6 +83,11 @@ class CurlProxy:
                     self.send_response(200)
                     self.send_header("Connection", "close")
                     self.end_headers()
+                    if head[:4] == b"\x89PNG" or head[:3] == b"\xff\xd8\xff" or head[:4] == b"GIF8":
+                        # Disguised segment: a real image header in front of the MPEG-TS data. Drop the image part,
+                        # or ffmpeg probes the segment as a picture and finds no video.
+                        buf = head + p.stdout.read(65536 - len(head))
+                        head = buf[ts_offset(buf):]
                     self.wfile.write(head)
                     while True:
                         buf = p.stdout.read(65536)
